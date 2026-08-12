@@ -36,6 +36,9 @@ function [U_rep,S_rep,V_rep] = tsvd_htd_dim4(U1,U2,U3,U4,B12,B34,Broot,tol)
 %   .frequency_ranks [n3 x n4] local T-SVD rank kept at each frequency pair
 %   .max_svd_rank    max(frequency_ranks(:))
 %
+% Requires:
+%   - fft, svd (base MATLAB only -- no external toolbox)
+%
 % Notes:
 %   - s = max_svd_rank is the tensor's own numerical rank at tolerance
 %     tol; a caller requesting target order r should pass
@@ -44,7 +47,6 @@ function [U_rep,S_rep,V_rep] = tsvd_htd_dim4(U1,U2,U3,U4,B12,B34,Broot,tol)
 %     structs and contract leaves against transfers, then inverse-FFT the
 %     transform-mode leaves (see resolve_core_729/htd_reconstruct_729 in
 %     tsvd_dim4_timing.m for a worked example).
-%   - Requires no external toolbox beyond base MATLAB (fft, svd).
 
 if nargin < 8 || isempty(tol)
     tol = 1e-12;

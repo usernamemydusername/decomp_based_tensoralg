@@ -36,6 +36,9 @@ function [U_rep, S_rep, V_rep] = tsvd_ttd_dim3(G1, G2, G3, n1, n2, n3, tol)
 %                    cores are padded/zero-extended; also the largest
 %                    order a caller can truncate a reduced model to
 %
+% Requires:
+%   - qr, fft, svd (base MATLAB only -- no external toolbox)
+%
 % Notes:
 %   - s = max_svd_rank is the TENSOR'S OWN numerical rank at tolerance
 %     tol; a caller requesting a target order r should pass
@@ -45,7 +48,6 @@ function [U_rep, S_rep, V_rep] = tsvd_ttd_dim3(G1, G2, G3, n1, n2, n3, tol)
 %     an inverse FFT along mode 3, then left-multiply by the mode-1/
 %     mode-2 leaf bases in cores{1} -- see tera_reduce.m for a worked
 %     example of this reconstruction.
-%   - Requires no external toolbox beyond base MATLAB (qr, fft, svd).
 
 if nargin < 7 || isempty(tol)
     tol = 1e-12;

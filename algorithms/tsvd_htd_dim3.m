@@ -32,13 +32,15 @@ function [U_rep,S_rep,V_rep] = tsvd_htd_dim3(U1,U2,U3,B12,Broot,tol)
 %   .frequency_ranks [n3 x 1] local T-SVD rank kept at each frequency
 %   .max_svd_rank    max(frequency_ranks)
 %
+% Requires:
+%   - fft, svd (base MATLAB only -- no external toolbox)
+%
 % Notes:
 %   - s = max_svd_rank is the tensor's own numerical rank at tolerance
 %     tol; a caller requesting target order r should pass
 %     r = min(r_requested, max_svd_rank).
 %   - To get dense U/S/V: truncate .core to rank r, inverse-FFT along the
 %     frequency dimension, then left-multiply by .leaf (no-op for S).
-%   - Requires no external toolbox beyond base MATLAB (fft, svd).
 
 if nargin < 6 || isempty(tol)
     tol = 1e-12;

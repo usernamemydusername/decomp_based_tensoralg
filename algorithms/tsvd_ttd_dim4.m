@@ -34,6 +34,9 @@ function [U_rep, S_rep, V_rep] = tsvd_ttd_dim4(G1,G2,G3,G4,n1,n2,n3,n4,tol)
 %   .frequency_ranks [n3 x n4] local T-SVD rank kept at each frequency pair
 %   .max_svd_rank    max(frequency_ranks(:))
 %
+% Requires:
+%   - qr, fft, svd (base MATLAB only -- no external toolbox)
+%
 % Notes:
 %   - s = max_svd_rank is the tensor's own numerical rank at tolerance
 %     tol; a caller requesting target order r should pass
@@ -46,7 +49,6 @@ function [U_rep, S_rep, V_rep] = tsvd_ttd_dim4(G1,G2,G3,G4,n1,n2,n3,n4,tol)
 %     additionally compresses mode 2 before the per-frequency SVDs;
 %     tsvd_ttd_dim4_ref.m does not, and is kept only as an independent
 %     cross-check, not for production use (see that file's header).
-%   - Requires no external toolbox beyond base MATLAB (qr, fft, svd).
 
 if nargin < 9 || isempty(tol)
     tol = 1e-12;

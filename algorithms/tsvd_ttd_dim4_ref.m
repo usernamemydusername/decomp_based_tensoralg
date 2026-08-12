@@ -27,10 +27,12 @@ function [U_rep, S_rep, V_rep] = tsvd_ttd_dim4_ref(G1,G2,G3,G4,n1,n2,n3,n4,tol)
 % rather than the compressed q x n2 basis tsvd_ttd_dim4.m returns -- the
 % two reconstruct to the same dense tensor).
 %
+% Requires:
+%   - qr, fft, svd (base MATLAB only -- no external toolbox)
+%
 % Notes:
 %   - Use tsvd_ttd_dim4.m for anything performance-sensitive; this file
 %     exists purely as an independent cross-check.
-%   - Requires no external toolbox beyond base MATLAB (qr, fft, svd).
 
 if nargin < 9 || isempty(tol)
     tol = 1e-12;

@@ -17,9 +17,10 @@ function C = tprod_definition(A, B)
 % Outputs:
 %   C   [n1 x l x n3] tensor, the T-product of A and B
 %
+% Requires:
+%   - tproduct toolbox: bcirc
+%
 % Notes:
-%   - Requires bcirc (block-circulant constructor) on the path, from the
-%     tproduct toolbox.
 %   - Not a good fit for large n1*n3 (the dense block-circulant matrix
 %     grows quadratically); TTD-/HTD-based T-product avoid ever forming
 %     it when A, B are (approximately) low-rank.

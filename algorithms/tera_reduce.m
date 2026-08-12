@@ -45,9 +45,12 @@ function [A_red, B_red, C_red, prof] = tera_reduce(A, B, C, k, T, L, method, opt
 %   prof                  struct of stage timings (buildH, tsvdH,
 %                         buildAred, buildBred, buildCred, total)
 %
+% Requires:
+%   - tproduct toolbox: tprod, tran, tsvd
+%   - tsvd_ttd_dim3.m   (used when method='ttd')
+%   - tsvd_htd_dim3.m   (used when method='htd')
+%
 % Notes:
-%   - Requires the tproduct toolbox (tprod, tran, tsvd) on the path, and
-%     (for 'ttd'/'htd') tsvd_ttd_dim3.m / tsvd_htd_dim3.m.
 %   - Because of the order-capping asymmetry above, DO NOT compare
 %     A_red/B_red/C_red across methods directly (elementwise) unless you
 %     have first verified all three achieved the same r -- otherwise the

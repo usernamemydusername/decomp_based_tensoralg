@@ -28,11 +28,13 @@ function [U1C,U2C,U3C,B12C,BrootC] = tprod_htd(U1A,U2A,U3A,B12A,BrootA, U1B,U2B,
 %                             [r1A x r2B x r] the only newly-computed
 %                             factor
 %
+% Requires:
+%   - fft, ifft (base MATLAB only -- no external toolbox)
+%
 % Notes:
 %   - Automatically detects and preserves realness: if all inputs are
 %     real, only ceil((r+1)/2) frequencies are computed explicitly and
 %     the rest filled in by conjugate symmetry, and B12C is returned real.
-%   - Requires no external toolbox beyond base MATLAB (fft, ifft).
 
 % ---- sizes / checks ----
 [n,  r1A] = size(U1A);

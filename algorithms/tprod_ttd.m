@@ -29,10 +29,12 @@ function [G1C, G2C, G3C] = tprod_ttd(G1_A, G2_A, G3_A, G1_B, G2_B, G3_B, n1, n2,
 %                 [r1C x l x r2C], [r2C x n3 x 1], with r1C = r1A*r1B,
 %                 r2C = r2A*r2B
 %
+% Requires:
+%   - TT-Toolbox core-layout convention on the inputs (see
+%     extract_tt_cores_dim3 in the calling driver for how to obtain
+%     G1_A/G2_A/G3_A from a tt_tensor object)
+%
 % Notes:
-%   - Requires the TT-Toolbox convention for TT-core layout on the input
-%     side (see extract_tt_cores_dim3 in the calling driver for how to
-%     obtain G1_A/G2_A/G3_A from a tt_tensor object).
 %   - Output ranks are NOT rounded/truncated -- for inputs with already
 %     large ranks, r1C/r2C can grow multiplicatively; round the result
 %     externally (e.g. via tt_tensor + round()) if a compressed output is
