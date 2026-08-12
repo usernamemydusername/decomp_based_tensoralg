@@ -1,45 +1,35 @@
 %% ---------------------------------------------------------------
-%  T-ERA timing benchmark (ERA vs T-ERA baseline vs T-ERA+TTD/HTD tsvd(H))
-%  + three system cases: random sparse, low-TT rank, low-HT rank
+%  TERA_TIMING  T-ERA (Eigensystem Realization Algorithm on a transform-
+%  domain Hankel tensor) reduced-order-model construction timing
+%  comparison: definition-based full T-SVD vs TTD-based vs HTD-based
+%  backend, across three Hankel-tensor generation regimes.
 %
-%  Successor to Test_TERA_3_730.m. Change in this version (_803):
-%    Sparse case (case 1) Hankel generation: nonzero COUNT is now capped
-%    at a fixed target_nnz (~30), independent of N=nRows*nCols*s, instead
-%    of a fixed density (1e-4) that let nnz -- and the achieved TT/HT
-%    rank -- grow with problem size. Same fix validated for T-product/
-%    T-SVD (pinning nnz keeps rank flat, restoring TTD/HTD's speedup over
-%    the baseline at large scale). All other logic, including H_list/
-%    n_array (unchanged -- only T-product/T-SVD had their size sweep
-%    extended), is carried forward unchanged from _730.
+%  What it does: for n=100 (state dimension), s=9 (tubal length), and a
+%  fixed Hankel block size H=10000 (giving nRows=nCols=10000), and each of
+%  three cases -- (1) Random Sparse Hankel tensor (fixed nnz=30,
+%  independent of H), (2) Low TT-rank, (3) Low HT-rank -- generates a
+%  stable random system (A,B,C) plus the corresponding Hankel tensor
+%  representation, then times tera_reduce.m's full reduced-order-model
+%  construction (Hankel T-SVD + ERA assembly) under each of the three
+%  T-SVD backends ('t'/'ttd'/'htd'), repeated over ntrials=10 trials.
+%  Saves a timing table and a 3-panel bar chart (one panel per case, one
+%  bar per method).
 %
-%  Prior successor note (Test_TERA_3_729_10.m -> _730): the 'ttd' branch now goes through
-%  tera_reduce (-> tsvd_ttd_dim3), which additionally
-%  compresses mode 2 of the Hankel tensor onto an orthogonal basis via QR
-%  of the mode-2 unfolding of G2 -- exact, not approximate (see that
-%  function's header for the derivation: a TT network-cut bound plus the
-%  isometry-preserves-SVD identity). In _729/_729_10, TTD's per-frequency
-%  reduced matrix was r1-by-n2 (mode 2 uncompressed, an implicit n2 x n2
-%  identity core), so each of the s per-frequency SVDs cost O(r1^2 n2);
-%  HTD, by contrast, already compresses BOTH modes via its own leaf
-%  factors. Here nCols = nRows by construction (m=l, T=L below), so this
-%  gap grows with H just as fast as the mode-1 gap does -- unlike the
-%  4th-order T-SVD timing experiment where n3=n4=4 were fixed constants.
-%  Validated on small asymmetric sizes before this run: _729 vs _730 T-ERA
-%  end-to-end outputs (A_red/B_red/C_red) agree to ~1e-14 relative error.
-%  The 'htd' branch is UNCHANGED (tera_reduce's htd case still calls
-%  tsvd_htd_dim3).
+%  Needs on the path: tera_reduce.m, which in turn needs tsvd_ttd_dim3.m,
+%  tsvd_htd_dim3.m, and the tproduct toolbox (tsvd/tprod/tran); plus the
+%  TT-Toolbox and htucker toolboxes for Hankel-tensor generation.
 %
-%  All other logic carried forward unchanged from Test_TERA_3_729_10.m:
-%    (1) Sparse case Hankel density 1e-4 (nnz floor guards against an
-%        all-zero tensor at small N).
-%    (2) opts.tt_rmax / opts.ht_r1 / opts.ht_r2 / opts.ht_r12 = 1e5
-%        (tolerance-driven rank, not a fixed cap -- a fixed cap=30
-%        previously caused a structurally WRONG Sparse-case reduced model).
-%    (3) The runtime memory guard before the Sparse case's 'ttd'/'htd'
-%        calls (estimated dominant intermediate vs preset budget).
+%  Outputs (to results/): TERA_scaling_H10000-10000_kfrac0.80_trials10_803.mat
+%  and the matching .fig bar chart.
 %
-%  All other parameters (n=100, s=9, H_list=[10000], k_frac=0.8,
-%  ntrials=10) are unchanged from Test_TERA_3_729_10.m.
+%  Notes:
+%    - This driver only TIMES the reduced-model construction; it does not
+%      evaluate reduced-model accuracy. For an accuracy comparison, see
+%      tera_relerr_hinf.m.
+%    - The memory guard (mem_budget_gb) that skips TTD/HTD as NaN when
+%      their achieved rank makes the intermediate arrays too large only
+%      meaningfully binds in the Sparse case; Low TT-/HT-rank ranks stay
+%      small regardless of H.
 %  ---------------------------------------------------------------
 
 clear; clc;

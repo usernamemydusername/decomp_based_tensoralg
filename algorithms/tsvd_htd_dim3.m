@@ -1,21 +1,44 @@
 function [U_rep,S_rep,V_rep] = tsvd_htd_dim3(U1,U2,U3,B12,Broot,tol)
-%COMPUTE_HTD_TSVD_DIM3_729 Core-form HTD/TD-based third-order T-SVD.
-% Implements Proposition (HTD/TD-based T-SVD) in mainCC_260729.tex
-% (prop:htd_tsvd) directly: since third-order HTD reduces to standard
-% Tucker format, the T-SVD factor tensors are represented as a small
-% frequency-domain core plus mode-1 (and, for V, mode-1) factor matrices --
-% NOT as a full n1 x s x n3 (etc.) tensor.
+%TSVD_HTD_DIM3  HTD/Tucker-based third-order T-SVD, computed directly
+% from the HTD (hierarchical Tucker) factors of a tensor T in
+% R^{n1 x n2 x n3}, without forming T or its frontal slices densely.
 %
-% Input: U1 [n1 x r1], U2 [n2 x r2], U3 [n3 x r3], B12 [r1 x r2 x r12],
-%        Broot [r12 x r3] (same HTD/TD convention as compute_htd_tsvd_dim3.m).
+% Algorithm: third-order HTD reduces to a plain Tucker decomposition
+% (leaf factors U1,U2 on modes 1-2, small core B12/Broot). The transform
+% mode (mode 3) is handled by FFT-ing U3 and contracting it against the
+% small core to get a size-r1-by-r2 "reduced slice" G_beta per frequency
+% beta = 1..n3; each G_beta then only needs a compact SVD of that small
+% matrix. The T-SVD factors are returned as leaf + frequency-domain-core
+% pairs (Tucker-style core-form), never reconstructed to a dense tensor
+% here.
 %
-% Output schema (Tucker-style core-form; NOT reconstructed):
-%   U_rep.leaf = U1 (n1 x r1);           U_rep.core = Ptilde (r1 x s x n3, frequency-domain)
-%   S_rep.leaf = [] (mode-1 is I_s, trivial); S_rep.core = Qtilde (s x s x n3, frequency-domain)
-%   V_rep.leaf = U2 (n2 x r2);           V_rep.core = Rtilde (r2 x s x n3, frequency-domain)
-% Reconstruction (validation/consumer-only): apply ifft along mode 3 to the
-% core, then a mode-1 tensor-matrix product with the leaf (trivial/no-op
-% for S). This is NOT done here.
+% Inputs:
+%   U1      [n1 x r1] mode-1 leaf factor (orthonormal columns)
+%   U2      [n2 x r2] mode-2 leaf factor (orthonormal columns)
+%   U3      [n3 x r3] mode-3 (transform-mode) leaf factor
+%   B12     [r1 x r2 x r12] mode-{1,2} transfer core
+%   Broot   [r12 x r3] root transfer matrix
+%   tol     (optional, default 1e-12) relative singular-value cutoff used
+%           per frequency slice to decide the local rank
+%
+% Outputs: U_rep, S_rep, V_rep -- each a struct describing the
+% corresponding T-SVD factor tensor in Tucker-style core-form:
+%   .format          'HTD_TD'
+%   .leaf            U1 (for U_rep), [] (for S_rep, mode-1 is trivially
+%                    I_s), or U2 (for V_rep)
+%   .core            frequency-domain core, size [r1 x s x n3] /
+%                    [s x s x n3] / [r2 x s x n3] for U/S/V respectively
+%   .mode_sizes      [n1,s,n3] / [s,s,n3] / [n2,s,n3]
+%   .frequency_ranks [n3 x 1] local T-SVD rank kept at each frequency
+%   .max_svd_rank    max(frequency_ranks)
+%
+% Notes:
+%   - s = max_svd_rank is the tensor's own numerical rank at tolerance
+%     tol; a caller requesting target order r should pass
+%     r = min(r_requested, max_svd_rank).
+%   - To get dense U/S/V: truncate .core to rank r, inverse-FFT along the
+%     frequency dimension, then left-multiply by .leaf (no-op for S).
+%   - Requires no external toolbox beyond base MATLAB (fft, svd).
 
 if nargin < 6 || isempty(tol)
     tol = 1e-12;

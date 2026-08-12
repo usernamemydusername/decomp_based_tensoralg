@@ -1,65 +1,34 @@
-%% compare_tprod_fixed_803.m
-% 3rd-order T-product timing comparison: definition vs TTD-based vs HTD-based.
+%% TPROD_TIMING  3rd-order T-product timing/accuracy comparison:
+% definition-based vs TTD-based vs HTD-based, across three tensor-
+% generation regimes and a range of problem sizes.
 %
-% Changes relative to compare_tprod_fixed_729_10.m:
-%   (1) Sparse case (Case 1) generation: nonzero COUNT is now capped at a
-%       fixed target_nnz (~30), independent of n, instead of a fixed
-%       density (1e-4) that made nnz grow with N=n*n*r. A fixed density
-%       let the achieved TT/HT rank climb toward full rank as n grew
-%       (confirmed: ratio r/n -> 1 asymptotically), which made TTD/HTD
-%       slower than definition-based at large n -- an artifact of the
-%       generator, not the methods. Capping nnz keeps the true rank
-%       pinned near target_nnz regardless of n (validated via a standalone
-%       probe: at n=4096, TT rank stayed at 30 and TTD/HTD were 42x/5834x
-%       faster than definition-based, with the speedup widening at larger
-%       n -- the expected trend once rank no longer blows up).
-%   (2) powers = 2:13 (was 3:13): sweep now starts at n=4 instead of n=8.
-%   (3) All definition-based tprod_definition calls (all 3 cases) are now wrapped
-%       in try/catch: an OOM/error is recorded as NaN and the loop
-%       continues, instead of crashing the whole run.
+% What it does: for each of three cases -- (1) Random Sparse (fixed
+% nnz=30, independent of tensor size), (2) Low TT-rank, (3) Low HT-rank
+% -- and each size n=n1=n2=l in 2.^(2:13) (transform-mode dimension
+% n3=6 fixed), generates a random A,B pair in that regime and times:
+%   - tprod_definition.m (definition-based, block-circulant)
+%   - tprod_ttd.m (TTD-based, computed from TT cores)
+%   - tprod_htd.m (HTD-based, computed from HT factors)
+% and (Sparse case) records the relative error of the TTD-/HTD-based
+% product against the definition-based result. Saves timing/accuracy
+% tables and a 3-panel log-log timing figure.
 %
-% All other architecture (Case 2/Low TT-rank, Case 3/Low HT-rank
-% generation, TTD/HTD call paths, memory guard, output variable names)
-% is unchanged from compare_tprod_fixed_729_10.m.
-% Unified successor to compare_tprod_fixed_729.m + compare_tprod_fixed_729_sparsefix.m:
-% runs all three data-generation regimes (Sparse / Low TT-rank / Low HT-rank)
-% in one pass, with every accuracy/robustness fix found in this investigation
-% folded in, instead of maintaining two files that later need their
-% sparse-case columns spliced together.
+% Needs on the path: tprod_definition.m, tprod_ttd.m, tprod_htd.m, plus
+% the TT-Toolbox (tt_tensor/tt_rand/round) and htucker toolboxes for
+% tensor generation.
 %
-% Changes relative to the original compare_tprod_fixed_729.m:
-%   (1) Sparse case density lowered 1e-3 -> 1e-4 (with an nnz floor guarding
-%       against an all-zero tensor at small n).
-%   (2) tt_rmax / ht_rmax raised to an effectively-uncapped value (1e5), so
-%       TT rounding is governed by tt_eps and numeric_to_ht_factors_dim3 is
-%       tolerance-adaptive (mirrors the TT side's round()) rather than
-%       blindly keeping a fixed column count. Sensitivity analysis earlier
-%       in this investigation showed the fixed rmax=50 cap silently
-%       destroyed accuracy for the Sparse case once n grew past ~128 (a
-%       fixed-density sparse tensor is NOT asymptotically low-rank), while
-%       it never binds for Low TT-/HT-rank data (whose true rank stays
-%       small regardless of n), so this fix is safe to apply uniformly.
-%   (3) TTD-based T-product now calls tprod_ttd (numerically
-%       verified identical to the original t_product_ttd_fast_2, just
-%       vectorized) instead of the original -- the original's explicit
-%       nested loop over r1A*r1B*r2A*r2B iterations took >30 minutes at
-%       just n=1024 once individual ranks grew large in the Sparse case.
-%   (4) A runtime memory guard is checked before every TTD-based call in
-%       the Sparse case: mainCC_260729.tex's own stated complexity for
-%       TTD-based T-product is O((r+s+rs)n log n + ...) -- the "rs" cross
-%       term is a DESIGNED part of the method (confirmed against the tex),
-%       not a bug. Once the Sparse case's true rank grows large enough
-%       that r*s makes the core tensor's memory footprint exceed a preset
-%       budget, that is an honest, expected limitation of the method (the
-%       same reasoning as definition-based being skipped/NaN'd above
-%       n_full_max_def elsewhere in this codebase), so it is skipped and
-%       recorded as NaN with a printed explanation, rather than crashing
-%       the whole job via OOM.
+% Outputs (to results/, filenames suffixed by SLURM_JOB_ID or a
+% timestamp): tprod_dim3_data_803_<id>.mat, tprod_dim3_panel_803_<id>.fig.
 %
-% Case 2 (Low TT-rank) and Case 3 (Low HT-rank) are otherwise unchanged
-% from the original -- their true ranks stay small regardless of n, so
-% none of the above fixes change their behavior; they are included here
-% only so this one file reproduces the full experiment in one pass.
+% Notes:
+%   - Definition-based T-product is skipped (NaN) above a fixed size
+%     cutoff (n_full_max_def) or on OOM/error (caught per case); TTD-
+%     based T-product in the Sparse case is additionally skipped under a
+%     dynamic memory-budget estimate (mem_budget_gb) once its achieved
+%     rank makes the core tensor too large.
+%   - Low TT-rank / Low HT-rank cases are constructed to have a small,
+%     size-independent true rank, so none of the above guards ever bind
+%     there.
 
 clc; clear; close all;
 

@@ -1,23 +1,42 @@
 function [G1C, G2C, G3C] = tprod_ttd(G1_A, G2_A, G3_A, G1_B, G2_B, G3_B, n1, n2, l, n3, tt_eps, tt_rmax)
-%T_PRODUCT_TTD_FAST_2_V2 Numerically IDENTICAL to t_product_ttd_fast_2.m
-% (same math, same output ranks r1C=r1A*r1B, r2C=r2A*r2B); only the core
-% construction loops are rewritten as vectorized broadcasts instead of
-% explicit MATLAB-level nested loops with squeeze() calls inside.
+%TPROD_TTD  TTD-based T-product of two third-order tensors, computed
+% directly from their TT (tensor-train) cores, without forming either
+% input tensor or the block-circulant matrix densely.
 %
-% Motivation: t_product_ttd_fast_2's G2C loop iterates
-% a1=1:r1A, b1=1:r1B, a2=1:r2A, b2=1:r2B -- O(r1A*r1B*r2A*r2B) MATLAB
-% scalar-loop iterations, each touching a length-l vector. r2A,r2B are
-% small (bounded by n3), but r1A,r1B grow with the true rank of the
-% inputs; for a near-full-rank sparse tensor at large n this becomes
-% many millions of iterations and was observed to take >30 minutes at
-% just n1=1024 (before even reaching any rank-rounding step). Since
-% r1B,r2B are small, looping only over (b1,b2) -- not (a1,b1,a2,b2) -- and
-% vectorizing the a1,a2,j dimensions via broadcasting reduces the loop
-% trip count from r1A*r1B*r2A*r2B to r1B*r2B while touching the exact
-% same total number of elements.
+% Algorithm: the transform-mode (mode 3) cores of A and B are FFT'd and
+% multiplied pointwise per frequency (T-product is elementwise matrix
+% multiplication in the transform domain); the mode-1/mode-2 cores are
+% combined via a bond-dimension contraction (M(a1,b1,a2) = sum_p
+% G2_A(a1,p,a2) G1_B(1,p,b1)) so the product tensor's TT ranks are
+% exactly r1C = r1A*r1B and r2C = r2A*r2B. The construction loops are
+% vectorized over the (small, n3-bounded) output ranks r2A,r2B rather
+% than looped naively over all four input ranks, which is what keeps
+% this fast even once r1A,r1B grow large with the true rank of the data.
 %
-% See t_product_ttd_fast_2.m for the full derivation/comments; this file
-% only changes HOW the same cores are computed.
+% Inputs:
+%   G1_A,G2_A,G3_A   TT cores of A: [1 x n1 x r1A], [r1A x n2 x r2A],
+%                    [r2A x n3 x 1]
+%   G1_B,G2_B,G3_B   TT cores of B: [1 x n2 x r1B], [r1B x l x r2B],
+%                    [r2B x n3 x 1]
+%   n1,n2,l,n3       ambient dimensions (A is n1 x n2 x n3, B is
+%                    n2 x l x n3, output C is n1 x l x n3)
+%   tt_eps,tt_rmax   (optional, defaults 1e-10, 50) accepted for API
+%                    compatibility; not currently used to round the
+%                    output cores
+%
+% Outputs:
+%   G1C,G2C,G3C   TT cores of C = A*B (T-product): [1 x n1 x r1C],
+%                 [r1C x l x r2C], [r2C x n3 x 1], with r1C = r1A*r1B,
+%                 r2C = r2A*r2B
+%
+% Notes:
+%   - Requires the TT-Toolbox convention for TT-core layout on the input
+%     side (see extract_tt_cores_dim3 in the calling driver for how to
+%     obtain G1_A/G2_A/G3_A from a tt_tensor object).
+%   - Output ranks are NOT rounded/truncated -- for inputs with already
+%     large ranks, r1C/r2C can grow multiplicatively; round the result
+%     externally (e.g. via tt_tensor + round()) if a compressed output is
+%     needed for further use.
 
 if nargin < 11 || isempty(tt_eps),  tt_eps  = 1e-10; end
 if nargin < 12 || isempty(tt_rmax), tt_rmax = 50;   end

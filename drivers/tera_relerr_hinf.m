@@ -1,53 +1,52 @@
 %% ---------------------------------------------------------------
-%  T-ERA relative H-infinity error table (3 cases x 3 methods = 9 numbers):
-%  Definition-based vs TTD-based vs HTD-based Hankel T-SVD backends.
+%  TERA_RELERR_HINF  T-ERA T-SVD-backend accuracy comparison: definition-
+%  based vs TTD-based vs HTD-based, measured as a genuine H-infinity
+%  (sup-over-frequency operator-norm) distance between each backend's
+%  truncated T-SVD reconstruction and the EXACT input Hankel tensor H.
 %
-%  Successor to Test_TERA_3_804_hinf.m, replacing its comparison
-%  methodology entirely for the reason below.
+%  What it does: for n=100, s=9, H=10000 (nRows=nCols=10000), and each of
+%  three cases -- (1) Random Sparse Hankel tensor (fixed nnz=30,
+%  independent of H), (2) Low TT-rank, (3) Low HT-rank -- generates the
+%  Hankel tensor H directly (NOT derived from a system (A,B,C) -- see
+%  Notes), computes each method's T-SVD reconstruction Hhat_m(:,:,beta) in
+%  the Fourier (mode-3) domain at that method's own truncation order, and
+%  computes
+%      relerr_m = max_beta ||Ahat(:,:,beta) - Hhat_m(:,:,beta)||_2
+%                 / max_beta ||Ahat(:,:,beta)||_2 ,   Ahat = fft(H,[],3)
+%  (spectral/operator norm, max over the s frequencies -- an H-infinity
+%  distance). Also reports TTD-/HTD-based vs Definition-based directly
+%  (same target order k), independent of the exact-H comparison above.
+%  Repeated over ntrials=3 trials; prints and saves both result tables.
 %
-%  Why _804_hinf's Sparse-case numbers are not meaningful:
-%  _804_hinf built each method's reduced (A,B,C) via T_ERA_fast_730 and
-%  compared them through resolvent/H-infinity evaluation. B_red/C_red are
-%  extracted from H's (1:l,1:m,:) corner block -- correct ERA theory for a
-%  REAL system (that corner literally equals the first Markov parameter
-%  C*B), but Sparse/LowTT/LowHT's H here is a synthetic tensor fed
-%  directly as a Hankel-matrix surrogate (see gen_H_case_prebuilt below),
-%  never derived from any real (A,B,C). For the Sparse case specifically
-%  (target_nnz=30 spread over nRows*nCols*s ~ 9e8 entries at H=10000),
-%  that l x m x s corner is essentially always empty (~0.3% chance of any
-%  hit per trial, verified empirically), so B_red/C_red there are built
-%  from pure SVD round-off noise and the resulting relative error
-%  saturates at an uninformative 1.0.
+%  Needs on the path: tsvd_ttd_dim3.m, tsvd_htd_dim3.m, plus the T-product
+%  toolbox (tsvd) and TT-Toolbox/htucker for Hankel-tensor generation.
+%  Does NOT need tera_reduce.m (no ERA (A,B,C) model is ever built here).
 %
-%  This driver instead measures T-SVD reconstruction fidelity directly
-%  against the FULL tensor H, sidestepping the corner-block issue AND the
-%  need to match state-space order/basis across methods (which is what
-%  made a naive A_red/B_red/C_red Frobenius comparison crash in
-%  Test_TERA_3_804.m, dimension mismatch between the 't' baseline's fixed
-%  order r=min(nRows,nCols)-k and ttd/htd's own numerical rank):
-%    For each method m, reconstruct Hhat_m(:,:,beta) = Uhat*Shat*Vhat' in
-%    the Fourier (mode-3) domain at that method's own truncation order,
-%    for beta=1..s, and compute
-%        relerr_m = max_beta ||Ahat(:,:,beta) - Hhat_m(:,:,beta)||_2
-%                   / max_beta ||Ahat(:,:,beta)||_2
-%    (spectral/operator norm -- a genuine H-infinity distance, sup over
-%    frequency of the largest singular value of the error). No ERA
-%    (A,B,C) construction, no corner extraction, no separate high-order
-%    reference model is needed (each method is compared directly against
-%    the exact input tensor H) -- this also removes one of the two
-%    full tsvd(H) calls _804_hinf needed per (case,trial), so this driver
-%    is cheaper as well as more meaningful.
+%  Outputs (to results/, filenames suffixed by SLURM_JOB_ID or a
+%  timestamp): tera_hinf_full_relerr_805_<id>.csv/.mat (per-method vs
+%  exact H) and tera_hinf_full_relerr_vs_def_805_<id>.csv (TTD/HTD vs
+%  Definition-based, same order).
 %
-%  For the 't' (Definition-based) method, tsvd(H) is still a full economy
-%  T-SVD, but the reconstruction is truncated to that method's own
-%  numerically effective rank (detected from the decay of its singular
-%  values) rather than the requested fixed order k -- mathematically
-%  identical (singular values past the effective rank contribute ~0 to
-%  the reconstruction) but avoids forming an unnecessarily high-rank
-%  (~2000) dense reconstruction when the tensor's true rank is ~30.
-%
-%  Sparse case generation (target_nnz=30, independent of tensor size) and
-%  opts/n/s/H/k_frac/ntrials are unchanged from Test_TERA_3_804_hinf.m.
+%  Notes:
+%    - H here is a synthetic tensor fed directly as a Hankel-matrix
+%      surrogate for each case (Sparse/LowTT/LowHT), not derived from any
+%      real (A,B,C) system's Markov parameters -- so this driver measures
+%      T-SVD reconstruction fidelity of that tensor, not reduced-order
+%      dynamical model fidelity. (An earlier version of this comparison
+%      instead built each method's ERA (A,B,C) via tera_reduce.m and
+%      compared resolvent responses derived from H's (1:l,1:m,:) corner
+%      block; that corner is only a meaningful "first Markov parameter"
+%      for a REAL system, and for the Sparse case here it is essentially
+%      always empty at this problem size, which made that comparison
+%      uninformative for the Sparse case specifically. This full-tensor,
+%      no-corner-block formulation avoids that issue and needs no
+%      separate high-order reference model.)
+%    - For the 't' (Definition-based) method, the reconstruction is
+%      truncated to that method's own numerically effective rank
+%      (detected from singular-value decay) rather than the full
+%      requested order k, for efficiency -- mathematically identical,
+%      since singular values past the effective rank contribute ~0 to the
+%      reconstruction.
 %  ---------------------------------------------------------------
 
 clear; clc;

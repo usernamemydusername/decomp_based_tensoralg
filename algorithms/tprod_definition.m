@@ -1,10 +1,28 @@
 function C = tprod_definition(A, B)
-    % Compute the T-product of two tensors A and B
-    % Inputs:
-    %   A - Tensor of size n1 x n2 x n3
-    %   B - Tensor of size n2 x l x n3
-    % Output:
-    %   C - Tensor of size n1 x l x n3 (T-product of A and B)
+%TPROD_DEFINITION  Definition-based (block-circulant) T-product of two
+% third-order tensors: C = A * B in the T-product sense.
+%
+% Algorithm: forms the full block-circulant matrix of A (size
+% (n1*n3) x (n2*n3)) and the block-column unfolding of B (size
+% (n2*n3) x l), multiplies them with a single dense matrix product, and
+% folds the result back into a tensor. This is the textbook/baseline
+% T-product implementation -- O(n1*n2*n3*l) dense FLOPs and O((n1*n3)*(n2*n3))
+% memory for the explicit block-circulant matrix -- used as the accuracy
+% and timing baseline against tprod_ttd.m / tprod_htd.m.
+%
+% Inputs:
+%   A   [n1 x n2 x n3] tensor
+%   B   [n2 x l  x n3] tensor
+%
+% Outputs:
+%   C   [n1 x l x n3] tensor, the T-product of A and B
+%
+% Notes:
+%   - Requires bcirc (block-circulant constructor) on the path, from the
+%     tproduct toolbox.
+%   - Not a good fit for large n1*n3 (the dense block-circulant matrix
+%     grows quadratically); TTD-/HTD-based T-product avoid ever forming
+%     it when A, B are (approximately) low-rank.
 
     % Get dimensions
     [n1, n2, n3] = size(A);

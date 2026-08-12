@@ -1,26 +1,50 @@
 function [U_rep,S_rep,V_rep] = tsvd_htd_dim4(U1,U2,U3,U4,B12,B34,Broot,tol)
-%COMPUTE_HTD_TSVD_DIM4_729_V2 Core-form HTD-based fourth-order T-SVD.
-% Numerically IDENTICAL to compute_htd_tsvd_dim4_729.m (same output
-% schema, same math); only the two construction steps that were
-% previously explicit nested for-loops are rewritten as matrix
-% multiplications (matricize + BLAS), so the cost scales with a single
-% dgemm chain instead of a MATLAB-level loop over r12*r34 or r3*r4
-% iterations.
+%TSVD_HTD_DIM4  HTD-based fourth-order T-SVD, computed directly from the
+% HTD factors of a tensor T in R^{n1 x n2 x n3 x n4}, tree {1,2}-{3,4},
+% without forming T or its per-frequency-pair frontal slices densely.
 %
-% Motivation: once the driver's rank selection became tolerance-adaptive
-% (no longer artificially capped), the achieved ranks r12/r34/r3/r4 grow
-% with the true rank of the data. compute_htd_tsvd_dim4_729's original
-% G-construction loop (over a=1:r12,b=1:r34) and per-frequency Gbeta loop
-% (over a3=1:r3,a4=1:r4, repeated n3*n4 times) then dominate runtime --
-% observed to make HTD-based T-SVD slower than the definition-based
-% method at n1=256 in the sparse case even after the rank-cap fix. Both
-% loops are pure tensor contractions and are mathematically identical to
-% a reshape + matrix-multiply chain; only the mechanism to compute them
-% changes.
+% Algorithm: the leaf factors U1,U2 (modes 1,2) and U3,U4 (transform
+% modes 3,4) are combined with the transfer cores B12/B34/Broot into a
+% reduced 4-way core G; U3,U4 are FFT'd and contracted against G to
+% produce a small r1-by-r2 "reduced slice" G_beta per frequency pair
+% (beta3,beta4); each G_beta then only needs a compact SVD of that small
+% matrix. The construction of G and of the per-frequency reduced slices
+% is done via matricized BLAS calls (reshape + matrix multiply) instead
+% of explicit loops over rank indices, which is what keeps this fast even
+% once the achieved HTD ranks grow with the true rank of the data.
+% Results are returned as leaf + transfer-core factor tensors (HTD-style
+% core-form), never reconstructed to a dense tensor here.
 %
-% Each output has fields:
-%   leaves    : {L1,L2,L3,L4}
-%   transfers : struct with nodes B12, B34, Broot
+% Inputs:
+%   U1,U2,U3,U4   [n_t x r_t] leaf factors for modes 1,2,3,4
+%   B12           [r1 x r2 x r12] mode-{1,2} transfer core
+%   B34           [r3 x r4 x r34] mode-{3,4} transfer core
+%   Broot         [r12 x r34] root transfer matrix
+%   tol           (optional, default 1e-12) relative singular-value
+%                 cutoff used per frequency pair to decide local rank
+%
+% Outputs: U_rep, S_rep, V_rep -- each a struct describing the
+% corresponding T-SVD factor tensor in HTD core-form:
+%   .format      'HTD', tree '{1,2}|{3,4}'
+%   .leaves      {L1,L2,L3,L4} (L3=L4=inverse-DFT matrices for the
+%                transform-mode leaves; identity leaves stored as plain
+%                eye(s) matrices)
+%   .transfers   struct with fields B12, B34, Broot -- B12/B34 here are
+%                lightweight "pairing_transfer" structs (a deterministic
+%                0/1 pattern, resolved on demand, not stored densely)
+%   .mode_sizes  [n1,s,n3,n4] / [s,s,n3,n4] / [n2,s,n3,n4]
+%   .frequency_ranks [n3 x n4] local T-SVD rank kept at each frequency pair
+%   .max_svd_rank    max(frequency_ranks(:))
+%
+% Notes:
+%   - s = max_svd_rank is the tensor's own numerical rank at tolerance
+%     tol; a caller requesting target order r should pass
+%     r = min(r_requested, max_svd_rank).
+%   - To reconstruct a dense factor tensor, resolve the pairing_transfer
+%     structs and contract leaves against transfers, then inverse-FFT the
+%     transform-mode leaves (see resolve_core_729/htd_reconstruct_729 in
+%     tsvd_dim4_timing.m for a worked example).
+%   - Requires no external toolbox beyond base MATLAB (fft, svd).
 
 if nargin < 8 || isempty(tol)
     tol = 1e-12;

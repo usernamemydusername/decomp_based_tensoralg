@@ -1,10 +1,38 @@
 function [U1C,U2C,U3C,B12C,BrootC] = tprod_htd(U1A,U2A,U3A,B12A,BrootA, U1B,U2B,U3B,B12B,BrootB)
-%COMPUTE_TPROD_HTD_FAST_CORE  Fast 3rd-order HTD-based T-product (returns HTD cores).
+%TPROD_HTD  HTD-based T-product of two third-order tensors, computed
+% directly from their HTD factors, without forming either input tensor
+% or the block-circulant matrix densely.
 %
-% Output HTD uses the same tree {1,2}-{3} and is constructed so that
-%   U1C = U1A,  U2C = U2B,  U3C = I_r,
-%   B12C(:,:,t) = H_time(:,:,t),  BrootC = I_r,
-% where H_time is the time-domain small core obtained via inverse FFT.
+% Algorithm: the transform-mode leaves U3A,U3B are FFT'd; per frequency,
+% the small mode-{1,2} cores are combined (via the shared mode-2/mode-1
+% contraction M = U2A' * U1B) and multiplied together, then the result is
+% inverse-FFT'd back to a time-domain small core B12C. The output HTD
+% keeps A's mode-1 leaf and B's mode-2 leaf unchanged (U1C=U1A, U2C=U2B)
+% and uses identity leaves/root on the transform mode, so B12C alone
+% carries all of the product's information.
+%
+% Inputs:
+%   U1A,U2A,U3A,B12A,BrootA   HTD factors of A (tree {1,2}-{3}): leaves
+%                             [n x r1A],[n2A x r2A],[r x r3A], transfer
+%                             core B12A [r1A x r2A x r12A], root BrootA
+%                             [r12A x r3A]
+%   U1B,U2B,U3B,B12B,BrootB   HTD factors of B, same convention, with
+%                             size(U1B,1) == size(U2A,1) (shared inner
+%                             T-product dimension) and size(U3B,1) ==
+%                             size(U3A,1) (matching transform-mode length)
+%
+% Outputs:
+%   U1C,U2C,U3C,B12C,BrootC   HTD factors of C = A*B: U1C=U1A, U2C=U2B,
+%                             U3C=BrootC=identity (size r x r, r = the
+%                             shared transform-mode length), and B12C
+%                             [r1A x r2B x r] the only newly-computed
+%                             factor
+%
+% Notes:
+%   - Automatically detects and preserves realness: if all inputs are
+%     real, only ceil((r+1)/2) frequencies are computed explicitly and
+%     the rest filled in by conjugate symmetry, and B12C is returned real.
+%   - Requires no external toolbox beyond base MATLAB (fft, ifft).
 
 % ---- sizes / checks ----
 [n,  r1A] = size(U1A);

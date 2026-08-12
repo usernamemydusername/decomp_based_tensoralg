@@ -1,40 +1,51 @@
 function [U_rep, S_rep, V_rep] = tsvd_ttd_dim3(G1, G2, G3, n1, n2, n3, tol)
-%COMPUTE_SVD_AK_TTD_DIM3_730 Core-form TTD-based third-order T-SVD, with
-% mode-2 also compressed onto an orthogonal basis (in addition to mode-1,
-% which _729 already compresses via QR of G1). Third-order analogue of
-% tsvd_ttd_dim4.m; since there is only ONE transform mode
-% (mode 3), no combined frequency index is needed.
+%TSVD_TTD_DIM3  TTD-based third-order T-SVD, computed directly from the
+% TT (tensor-train) cores of a tensor T in R^{n1 x n2 x n3}, without ever
+% forming T or its per-frequency (mode-3 Fourier) frontal slices densely.
 %
-% Motivation / correctness: identical argument as in
-% tsvd_ttd_dim4.m. In _729, the per-frequency reduced matrix
-% Mbeta = Rmat*Abeta is r1-by-n2: mode 1 is compressed to rank r1 via QR
-% of G1, but mode 2 is left at its full physical size n2 (R1 is an
-% implicit n2 x n2 identity core), so each of the n3 per-frequency SVDs
-% costs O(r1^2 n2). Since Abeta is, for every frequency, a linear
-% combination of the SAME r2 fixed (r1 x n2) slices of G2, its mode-2
-% columns live inside a shared subspace of dimension <= r1*r2 (TT
-% network-cut bound: cutting both edges touching node 2 bounds its rank
-% against the rest by the product of the two edge ranks r1*r2), regardless
-% of frequency. We extract that shared subspace ONCE via a QR of the
-% mode-2 unfolding of G2, then every per-frequency SVD operates on an
-% r1-by-q matrix (q = min(n2, r1*r2)) instead of r1-by-n2.
+% Algorithm: mode 1 is compressed to its TT bond rank r1 via a QR of the
+% first TT core; mode 2 is compressed to a rank-q orthogonal basis
+% (q = min(n2, r1*r2)) via a QR of the mode-2 unfolding of the second TT
+% core (exact, not an approximation: an isometry Q2 satisfies Q2.'*Q2=I,
+% so a matrix M and its Q2-reduced form M*Q2 share singular values/left
+% singular vectors); the transform mode (mode 3) is handled via a
+% length-n3 FFT of the third TT core. Each of the n3 resulting frequency
+% slices then only needs a compact SVD of a small r1-by-q matrix (instead
+% of an r1-by-n2 matrix), giving the per-frequency T-SVD factors, which
+% are returned in factored TT-core form (never reconstructed to a dense
+% n1 x s x n3 tensor here).
 %
-% Exactness: write Mbeta = Abeta_reduced * Q2.', where Q2 (n2 x q) has
-% orthonormal columns from the QR above. Since Q2.'*Q2 = I_q, Mbeta and
-% Abeta_reduced share the same singular values and left singular vectors;
-% if Abeta_reduced = Uhat*Shat*What', then Mbeta = Uhat*Shat*(Q2*What)' is
-% a valid compact SVD of Mbeta. So V_beta = Q2*What_beta reproduces
-% exactly the same T-SVD factors as _729, just computed more cheaply and
-% left in factored (Q2, What) form.
+% Inputs:
+%   G1        [1  x n1 x r1] first TT core of T
+%   G2        [r1 x n2 x r2] second TT core of T
+%   G3        [r2 x n3 x 1 ] third (transform-mode) TT core of T
+%   n1,n2,n3  ambient tensor dimensions
+%   tol       (optional, default 1e-12) relative singular-value cutoff
+%             used per frequency slice to decide the local rank
 %
-% Output schema unchanged from _729 (TT cores, no full tensors formed):
-%   U_rep.cores = {P1,P2,P3}
-%   S_rep.cores = {Q1,Q2,P3}
-%   V_rep.cores = {R1,R2,P3}
-% The only structural change vs. _729: V_rep's R1 leaf is now the genuine
-% mode-2 basis Q2 (n2 x q), replacing the n2 x n2 implicit identity core,
-% and R2 is q x s x n3 instead of n2 x s x n3 -- mirroring exactly how
-% U_rep already stores Q1 (n1 x r1) instead of an n1-sized identity.
+% Outputs: U_rep, S_rep, V_rep -- each a struct describing the
+% corresponding T-SVD factor tensor (U, S, or V, size [n_mode x s x n3]
+% once reconstructed) in TT-core form:
+%   .format          'TTD'
+%   .cores           {P1,P2,P3} (U_rep/S_rep/V_rep share the same P3;
+%                    mode_sizes below distinguishes each tensor's own
+%                    leading two core sizes)
+%   .mode_sizes      [n1,s,n3] / [s,s,n3] / [n2,s,n3] for U/S/V respectively
+%   .frequency_ranks [n3 x 1] local T-SVD rank kept at each frequency
+%   .max_svd_rank    max(frequency_ranks) -- the rank s at which the
+%                    cores are padded/zero-extended; also the largest
+%                    order a caller can truncate a reduced model to
+%
+% Notes:
+%   - s = max_svd_rank is the TENSOR'S OWN numerical rank at tolerance
+%     tol; a caller requesting a target order r should pass
+%     r = min(r_requested, max_svd_rank) before reconstructing/truncating,
+%     since asking for more than max_svd_rank adds no information.
+%   - To get dense U/S/V, truncate cores{2} to the desired rank r, apply
+%     an inverse FFT along mode 3, then left-multiply by the mode-1/
+%     mode-2 leaf bases in cores{1} -- see tera_reduce.m for a worked
+%     example of this reconstruction.
+%   - Requires no external toolbox beyond base MATLAB (qr, fft, svd).
 
 if nargin < 7 || isempty(tol)
     tol = 1e-12;

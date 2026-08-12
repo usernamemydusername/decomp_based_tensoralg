@@ -1,62 +1,43 @@
-%% compare_tsvd_dim4_sparse_tt_ht_v4_803.m
-% Compare 4th-order T-SVD runtimes under three tensor-generation regimes.
-% Successor to compare_tsvd_dim4_sparse_tt_ht_v4_730.m.
+%% TSVD_DIM4_TIMING  4th-order T-SVD timing/accuracy comparison:
+% definition-based vs TTD-based vs HTD-based, across three tensor-
+% generation regimes and a range of problem sizes.
 %
-% Changes relative to _730:
-%   (A) Sparse case generation: nonzero COUNT is now capped at a fixed
-%       target_nnz (~30), independent of n1*n2*n3*n4, instead of a fixed
-%       density (1e-4) that let nnz -- and the achieved TT/HT rank --
-%       grow with n. Validated (via a standalone T-product-structure
-%       probe) that pinning nnz keeps rank flat and restores a large,
-%       widening TTD/HTD speedup over definition-based at large n.
-%   (B) powers = 2:13 (was 3:13): sweep now starts at n1=n2=4.
-%   (C) n_full_max_def raised from 2^12 to 2^13: definition-based is now
-%       attempted across the full sweep, relying on the existing
-%       try/catch (already present in all 3 cases) to record NaN on
-%       OOM/error instead of a preemptive cutoff.
-%   (D) n_full_max_ttd_sparse raised from 2^12 to 2^13: this cap existed
-%       specifically because fixed-density sparse tensors were not
-%       asymptotically low-rank (root cause of change (A)); now that nnz
-%       -- and hence rank -- is pinned near target_nnz_sparse regardless
-%       of n, TTD is allowed to attempt the full sweep in the Sparse
-%       case too, with the existing dynamic memory guard as the
-%       remaining safety net.
+% What it does:
+%   1. Runs a one-time, small-scale (n1=n2=16) self-consistency check:
+%      confirms tsvd_ttd_dim4.m's reconstruction agrees with the
+%      independent tsvd_ttd_dim4_ref.m implementation, and that both the
+%      TTD- and HTD-based reconstructions agree with a directly-generated
+%      tensor to <=1e-6 relative error, before running any timed sweep.
+%   2. For each of three cases -- (1) Random Sparse (fixed nnz=30,
+%      independent of tensor size), (2) Low TT-rank, (3) Low HT-rank --
+%      and each size n1=n2 in 2.^(2:13) (n3=n4=4 fixed), times:
+%        - definition_tsvd_dim4 (local function): full per-frequency
+%          dense SVD after a 2-D FFT along modes 3,4
+%        - tsvd_ttd_dim4.m (TTD-based, computed from TT cores)
+%        - tsvd_htd_dim4.m (HTD-based, computed from HT factors)
+%      and (for the Sparse case, and wherever else feasible) records the
+%      reconstruction relative error of the TTD-/HTD-based T-SVD against
+%      the exact input tensor.
+%   3. Saves timing/accuracy tables and a 3-panel log-log timing figure.
 %
-% All other architecture -- including the dynamic memory guards -- is
-% unchanged from _730.
+% Needs on the path: tsvd_ttd_dim4.m, tsvd_ttd_dim4_ref.m (validation
+% only), tsvd_htd_dim4.m, plus the TT-Toolbox (tt_tensor/tt_rand/round)
+% and htucker (htenrandn/orthog) toolboxes for tensor generation.
 %
-% Changes relative to _729_10:
-%   (1) TTD-based T-SVD now calls tsvd_ttd_dim4 instead of
-%       _729. _729's per-frequency reduced matrix M_beta = R1*A_beta is
-%       r1-by-n2 (mode 1 compressed via QR of G1, mode 2 left at full
-%       physical size n2), so every one of the Nf=n3*n4 per-frequency SVDs
-%       costs O(r1^2 n2) -- this is exactly why TTD-based T-SVD was
-%       observed to grow with n even in the Low TT-rank/Low HT-rank cases,
-%       where HTD-based stayed flat (HTD's leaf factors U1,U2 already
-%       compress BOTH mode 1 and mode 2, so its per-frequency SVD is on an
-%       r1-by-r2 matrix, independent of n). _730 adds the missing mode-2
-%       compression: since A_beta is, for every frequency, a linear
-%       combination of the same r2 fixed (r1 x n2) slices of G2, its
-%       mode-2 columns live in a shared subspace of dimension <= r1*r2
-%       (TT network-cut bound), extracted ONCE via a QR of the mode-2
-%       unfolding of G2. This is provably exact (not an approximation --
-%       see the derivation in tsvd_ttd_dim4.m) and verified
-%       to reconstruct the same tensor as _729 to ~1e-15 relative error on
-%       a random low-TT-rank test case, with a 2x-25x speedup depending on
-%       n2 (smoke-tested up to n2=32768).
-%   (2) Sparse case: in addition to the existing dynamic memory-budget
-%       guard, TTD-based T-SVD is now also hard-capped at n1 <= 2^12 for
-%       the Sparse case specifically (matches n_full_max_def's existing
-%       cap for the definition-based method). This is an explicit request
-%       following the _729_10 run's OOM: fixed-density sparse tensors are
-%       not asymptotically low-rank, so the achieved TT rank r1 grows
-%       close to n1 itself, and _730's mode-2 QR (cost O(n2*(r1r2)^2))
-%       does NOT help when r1,r2 are themselves large -- the Sparse case
-%       is the one regime where this optimization doesn't change the
-%       underlying risk, so the explicit n1-based cutoff (rather than only
-%       the dynamic estimated-memory guard, which still runs after the
-%       expensive rank-discovery step) is kept as a first line of defense.
-% HTD-based T-SVD is unchanged (still calls tsvd_htd_dim4).
+% Outputs (to results/, filenames suffixed by SLURM_JOB_ID or a
+% timestamp): tsvd_dim4_803_<id>.mat (timing/accuracy arrays) and
+% tsvd_dim4_panel_803_<id>.fig (3-panel figure, one panel per case).
+%
+% Notes:
+%   - Definition-based and TTD-based (Sparse case only) are skipped
+%     (recorded as NaN) above fixed size cutoffs / a dynamic memory-
+%     budget estimate, to avoid OOM crashing the whole sweep; see
+%     n_full_max_def / n_full_max_ttd_sparse / mem_budget_gb.
+%   - n3=n4=4 are fixed across the whole sweep (only n1=n2 grows), so
+%     definition-based cost here grows like the SVD of an n1 x n2 matrix,
+%     NOT like n1^4 -- that quartic-in-n regime only appears if n3,n4 are
+%     also scaled up to n (see the paper's complexity remarks, which
+%     assume n1=n2=n3=n).
 
 clc; clear; close all;
 

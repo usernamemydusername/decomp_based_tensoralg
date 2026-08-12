@@ -1,29 +1,63 @@
 function [A_red, B_red, C_red, prof] = tera_reduce(A, B, C, k, T, L, method, opts, H_input)
-%tera_reduce  T-product ERA with swappable Hankel t-SVD backend.
-% Revised copy of T_ERA_fast_729.m: the 'ttd' branch now calls
-% tsvd_ttd_dim3 instead of compute_svd_Ak_TTD_dim3_729,
-% which additionally compresses mode 2 of the Hankel tensor onto an
-% orthogonal basis (exact, not approximate -- see that function's header
-% for the derivation), mirroring the compression HTD already gets from its
-% own leaf factor on mode 2. reconstruct_truncated_ttd_dim3_730 below is
-% updated to multiply V1 by that new leaf (R1), the same way U1 was
-% already multiplied by the mode-1 leaf (P1) in _729. The 'htd' branch is
-% UNCHANGED (still calls tsvd_htd_dim3), since HTD already
-% compresses both modes.
+%TERA_REDUCE  Eigensystem Realization Algorithm (ERA) reduced-order model
+% construction for a T-product (transform-domain) LTI system, with a
+% swappable T-SVD backend for factoring the underlying Hankel tensor.
 %
-% Unlike the standalone T-SVD timing experiment (compare_tsvd_dim4_*),
-% T-ERA's reduced-model construction genuinely needs dense U1,S1,V1
-% tensors (they feed tprod/tran below), so reconstruction is an inherent,
-% legitimately-timed part of this pipeline -- it is NOT skipped. The
-% efficiency gain here comes from truncating the core-form representation
-% to the needed rank r BEFORE reconstruction, instead of the original
-% approach of reconstructing the full (potentially much larger) max-rank
-% tensor and truncating afterward.
+% Given either a system (A,B,C) or a precomputed Hankel-tensor
+% representation, forms/reads the Hankel tensor H of Markov parameters
+% (and its one-step shift Hh), computes a rank-r T-SVD of H via one of
+% three backends (definition-based full SVD, TTD-based, or HTD-based --
+% all three compute the SAME T-SVD of the SAME H, only the computational
+% path differs), and assembles the reduced-order model via the standard
+% ERA realization formulas
+%   A_red = S^{-1/2} U1' Hh V1 S^{-1/2}
+%   B_red = S^{1/2} V1'(:, 1:m)
+%   C_red = U1(1:l,:) S^{1/2}
 %
-% All other logic (Hankel construction, S^{+/-1/2}, reduced-model
-% assembly via tprod/tran) is UNCHANGED from T_ERA_fast.m / T_ERA_fast_729.m.
+% Inputs:
+%   A,B,C     system tensors, sizes [n x n x s], [n x m x s], [l x n x s]
+%             (only used to build H/Hh when H_input is empty)
+%   k         truncation parameter; target reduced order is
+%             r = min(nRows,nCols) - k, with nRows=l*(L+1), nCols=m*(T+1)
+%   T, L      number of column/row Hankel blocks
+%   method    't' (definition-based, full T-SVD via tsvd(H)), 'ttd'
+%             (tsvd_ttd_dim3), or 'htd' (tsvd_htd_dim3) -- selects the
+%             T-SVD backend
+%   opts      struct; relevant field: svd_tol (rank-detection tolerance
+%             for the ttd/htd backends)
+%   H_input   (optional) precomputed Hankel representation, struct with
+%             field .type = 'full' | 'ttd' | 'htd' and the corresponding
+%             data (.H/.Hh for 'full'; .tt_cores.G1/G2/G3 + .Hh for 'ttd';
+%             .ht_factors.U1/U2/U3/B12/Broot + .Hh for 'htd'). If empty,
+%             H and Hh are built directly from A,B,C's Markov parameters.
 %
-% Inputs / outputs: identical to T_ERA_fast_729.m.
+% Outputs:
+%   A_red, B_red, C_red   reduced system tensors, sizes [r x r x s],
+%                         [r x m x s], [l x r x s], where r is the ACTUAL
+%                         achieved order: r = min(k's implied order,
+%                         size(U,2)) for 't', or r = min(k's implied
+%                         order, U_rep.max_svd_rank) for 'ttd'/'htd' --
+%                         i.e. 'ttd'/'htd' silently cap to the Hankel
+%                         tensor's own numerical rank, while 't' does
+%                         not, so reduced models from different methods
+%                         can end up with DIFFERENT state dimension r for
+%                         the same requested k.
+%   prof                  struct of stage timings (buildH, tsvdH,
+%                         buildAred, buildBred, buildCred, total)
+%
+% Notes:
+%   - Requires the tproduct toolbox (tprod, tran, tsvd) on the path, and
+%     (for 'ttd'/'htd') tsvd_ttd_dim3.m / tsvd_htd_dim3.m.
+%   - Because of the order-capping asymmetry above, DO NOT compare
+%     A_red/B_red/C_red across methods directly (elementwise) unless you
+%     have first verified all three achieved the same r -- otherwise the
+%     comparison will error on a dimension mismatch or, worse, silently
+%     compare two systems that are valid realizations in different bases
+%     (T-SVD is only unique up to sign per singular vector). Compare via
+%     a basis-independent metric instead (e.g. resolvent/H-infinity
+%     response), or compare the underlying T-SVD's reconstruction
+%     accuracy directly (bypassing this function entirely, as
+%     tera_relerr_hinf.m does).
 
 if nargin < 7 || isempty(method), method = 't'; end
 if nargin < 8 || isempty(opts), opts = struct(); end

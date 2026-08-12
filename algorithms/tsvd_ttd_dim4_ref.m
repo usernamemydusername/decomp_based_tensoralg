@@ -1,15 +1,36 @@
 function [U_rep, S_rep, V_rep] = tsvd_ttd_dim4_ref(G1,G2,G3,G4,n1,n2,n3,n4,tol)
-%COMPUTE_SVD_AK_TTD_DIM4_729 Core-form TTD-based fourth-order T-SVD.
-% Returns the TT cores prescribed in mainCC_260729.tex without forming full
-% U, S, or V tensors. Identity cores may be stored implicitly to avoid
-% allocating an n2-by-n2 dense identity matrix.
+%TSVD_TTD_DIM4_REF  TTD-based fourth-order T-SVD -- reference/validation
+% implementation, numerically equivalent to tsvd_ttd_dim4.m but WITHOUT
+% that file's mode-2 compression (mode 2 is left at its full physical
+% size n2 in the per-frequency reduced matrix, i.e. each of the
+% Nf = n3*n4 per-frequency SVDs operates on an r1-by-n2 matrix instead of
+% the smaller r1-by-q matrix tsvd_ttd_dim4.m uses).
 %
-% Output schema:
-%   U_rep.cores = {P1,P2,P3,P4}
-%   S_rep.cores = {Q1,Q2,Q3,Q4}
-%   V_rep.cores = {R1,R2,R3,R4}
-% where an implicit identity core is represented by a struct with fields
-%   type = 'identity_tt_core', physical_size, rank_size.
+% Role in this repo: NOT used to produce any reported timing/accuracy
+% result. tsvd_dim4_timing.m calls this function once, at a small
+% validation size (n1=n2=16), purely to confirm that tsvd_ttd_dim4.m's
+% reconstructed tensor agrees with this simpler/slower implementation
+% before using tsvd_ttd_dim4.m for the actual (much larger) timed sweep.
+% Kept in this repo only so that self-check is reproducible.
+%
+% Inputs:
+%   G1              [1  x n1 x r1] first TT core of T
+%   G2              [r1 x n2 x r2] second TT core of T
+%   G3              [r2 x n3 x r3] third (transform-mode) TT core of T
+%   G4              [r3 x n4 x 1 ] fourth (transform-mode) TT core of T
+%   n1,n2,n3,n4     ambient tensor dimensions
+%   tol             (optional, default 1e-12) relative singular-value
+%                   cutoff used per frequency pair to decide local rank
+%
+% Outputs: U_rep, S_rep, V_rep, same schema as tsvd_ttd_dim4.m (TT-core
+% form; V_rep's mode-2 leaf here is an implicit n2 x n2 identity core
+% rather than the compressed q x n2 basis tsvd_ttd_dim4.m returns -- the
+% two reconstruct to the same dense tensor).
+%
+% Notes:
+%   - Use tsvd_ttd_dim4.m for anything performance-sensitive; this file
+%     exists purely as an independent cross-check.
+%   - Requires no external toolbox beyond base MATLAB (qr, fft, svd).
 
 if nargin < 9 || isempty(tol)
     tol = 1e-12;
