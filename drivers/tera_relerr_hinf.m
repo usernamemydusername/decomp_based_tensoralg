@@ -2,35 +2,52 @@
 %  T-ERA relative H-infinity error table (3 cases x 3 methods = 9 numbers):
 %  Definition-based vs TTD-based vs HTD-based Hankel T-SVD backends.
 %
-%  Successor to Test_TERA_3_729_10_hinf.m, updated to match the nnz-cap fix
-%  and tera_reduce backend used by Test_TERA_3_803.m / Test_TERA_3_804.m.
-%  This is the accuracy/H-infinity companion to that timing driver: _803/_804
-%  only timed the three methods (and _804's naive Frobenius-norm A_red/B_red/
-%  C_red comparison crashed on a dimension mismatch -- the 't' baseline
-%  truncates to the FIXED order r=min(nRows,nCols)-k=2000, while 'ttd'/'htd'
-%  truncate to the tensor's own numerical rank, e.g. ~30/3/2 in the three
-%  cases -- so the reduced models have different state dimension and cannot
-%  be subtracted elementwise). This file instead reuses the pre-existing,
-%  basis/dimension-independent H-infinity relative-error methodology from
-%  Test_TERA_3_729_10_hinf.m: each method's reduced model is compared to a
-%  common higher-order reference via per-frequency resolvent (transfer
-%  function) evaluation, so comparisons remain valid across differing state
-%  orders.
+%  Successor to Test_TERA_3_804_hinf.m, replacing its comparison
+%  methodology entirely for the reason below.
 %
-%  Changes relative to Test_TERA_3_729_10_hinf.m:
-%    (1) Sparse case (case 1) Hankel generation: nonzero COUNT is now capped
-%        at a fixed target_nnz (~30), independent of N=nRows*nCols*s -- same
-%        fix as Test_TERA_3_803.m/_804.m -- instead of the old fixed density
-%        (1e-4) that let nnz, and the achieved TT/HT rank, grow with problem
-%        size (H is fixed at 10000 here, so this mainly keeps the fix
-%        consistent across all T-ERA drivers rather than changing behavior
-%        at this one fixed H).
-%    (2) All T_ERA_fast_729 calls -> tera_reduce (mirrors _803/_804;
-%        adds mode-2 compression on the 'ttd' branch, see that function's
-%        header). The 'htd' branch is unchanged internally.
-%  All other logic (reference-model construction at r_ref=1.3*r_normal,
-%  memory guard, H-infinity computation, opts, n=100/s=9/H=10000/k_frac=0.8,
-%  ntrials=3) is carried forward unchanged from Test_TERA_3_729_10_hinf.m.
+%  Why _804_hinf's Sparse-case numbers are not meaningful:
+%  _804_hinf built each method's reduced (A,B,C) via T_ERA_fast_730 and
+%  compared them through resolvent/H-infinity evaluation. B_red/C_red are
+%  extracted from H's (1:l,1:m,:) corner block -- correct ERA theory for a
+%  REAL system (that corner literally equals the first Markov parameter
+%  C*B), but Sparse/LowTT/LowHT's H here is a synthetic tensor fed
+%  directly as a Hankel-matrix surrogate (see gen_H_case_prebuilt below),
+%  never derived from any real (A,B,C). For the Sparse case specifically
+%  (target_nnz=30 spread over nRows*nCols*s ~ 9e8 entries at H=10000),
+%  that l x m x s corner is essentially always empty (~0.3% chance of any
+%  hit per trial, verified empirically), so B_red/C_red there are built
+%  from pure SVD round-off noise and the resulting relative error
+%  saturates at an uninformative 1.0.
+%
+%  This driver instead measures T-SVD reconstruction fidelity directly
+%  against the FULL tensor H, sidestepping the corner-block issue AND the
+%  need to match state-space order/basis across methods (which is what
+%  made a naive A_red/B_red/C_red Frobenius comparison crash in
+%  Test_TERA_3_804.m, dimension mismatch between the 't' baseline's fixed
+%  order r=min(nRows,nCols)-k and ttd/htd's own numerical rank):
+%    For each method m, reconstruct Hhat_m(:,:,beta) = Uhat*Shat*Vhat' in
+%    the Fourier (mode-3) domain at that method's own truncation order,
+%    for beta=1..s, and compute
+%        relerr_m = max_beta ||Ahat(:,:,beta) - Hhat_m(:,:,beta)||_2
+%                   / max_beta ||Ahat(:,:,beta)||_2
+%    (spectral/operator norm -- a genuine H-infinity distance, sup over
+%    frequency of the largest singular value of the error). No ERA
+%    (A,B,C) construction, no corner extraction, no separate high-order
+%    reference model is needed (each method is compared directly against
+%    the exact input tensor H) -- this also removes one of the two
+%    full tsvd(H) calls _804_hinf needed per (case,trial), so this driver
+%    is cheaper as well as more meaningful.
+%
+%  For the 't' (Definition-based) method, tsvd(H) is still a full economy
+%  T-SVD, but the reconstruction is truncated to that method's own
+%  numerically effective rank (detected from the decay of its singular
+%  values) rather than the requested fixed order k -- mathematically
+%  identical (singular values past the effective rank contribute ~0 to
+%  the reconstruction) but avoids forming an unnecessarily high-rank
+%  (~2000) dense reconstruction when the tensor's true rank is ~30.
+%
+%  Sparse case generation (target_nnz=30, independent of tensor size) and
+%  opts/n/s/H/k_frac/ntrials are unchanged from Test_TERA_3_804_hinf.m.
 %  ---------------------------------------------------------------
 
 clear; clc;
@@ -47,67 +64,66 @@ case_names = {'Sparse', 'LowTT', 'LowHT'};
 numCases = numel(case_names);
 ntrials = 3;
 
-w_grid = linspace(0, pi, 60);
-
 opts = struct();
 opts.svd_tol = 1e-12;
 opts.tt_eps  = 1e-10;
-opts.tt_rmax = 1e5;    % was 30 -- effectively uncapped, tolerance governs
+opts.tt_rmax = 1e5;
 opts.ht_r1   = 1e5;
 opts.ht_r2   = 1e5;
 opts.ht_r3   = min(9,s);
 opts.ht_r12  = 1e5;
 
-mem_budget_gb = 100;   % same budget as Test_TERA_3_729_10.m
+mem_budget_gb = 100;
 
 method_names = {'Definition-based','TTD-based','HTD-based'};
 method_tags  = {'t','ttd','htd'};
 numMethods = numel(method_tags);
-
-RelErr = nan(numCases, numMethods, ntrials);
-% Extra comparison: TTD-based / HTD-based vs Definition-based, both AT THE
-% SAME target order k (unlike RelErr above, which compares every method
-% against a separate higher-order reference model). This gives a second,
-% tighter view of TTD/HTD fidelity that doesn't go through the reference.
-RelErr_TTDvsDef = nan(numCases, ntrials);
-RelErr_HTDvsDef = nan(numCases, ntrials);
 
 [l, L] = pick_lL(H);
 m = l; T = L;
 nRows = l*(L+1); nCols = m*(T+1);
 k = min(round(k_frac * min(nRows,nCols)), min(nRows,nCols)-1);
 r_normal = min(nRows,nCols) - k;
-r_ref = min(round(1.3*r_normal), min(nRows,nCols)-1);
-k_ref = min(nRows,nCols) - r_ref;
+
+RelErr = nan(numCases, numMethods, ntrials);
+RelErr_TTDvsDef = nan(numCases, ntrials);
+RelErr_HTDvsDef = nan(numCases, ntrials);
 
 for trial = 1:ntrials
-    [A, B, C] = gen_ABC_base(n, m, l, s);
-    A = stabilize_tensor_A(A, 0.95);
-
     for c = 1:numCases
         fprintf('\n=== Case: %s | trial %d/%d ===\n', case_names{c}, trial, ntrials);
         Hpack = gen_H_case_prebuilt(c, nRows, nCols, s, opts);
+        Hten = Hpack.full.H;
 
-        [A_ref, B_ref, C_ref, ~] = tera_reduce(A, B, C, k_ref, T, L, 't', opts, Hpack.full);
-        fprintf('  %-18s : (reference, order r=%d)\n', 'High-precision ref', size(A_ref,1));
+        Ahat = fft(Hten, [], 3);
+        max_full = 0;
+        for beta = 1:s
+            max_full = max(max_full, svds(Ahat(:,:,beta), 1));
+        end
 
-        % Memory guard, only meaningfully large for the Sparse case
-        % (LowTT/LowHT ranks stay tiny regardless), matching the same
-        % reasoning already used in Test_TERA_3_729_10.m.
         r1_tt = size(Hpack.ttd.tt_cores.G1, 3);
         mem_gb_ttd = s * r1_tt^2 * 16 / 1e9;
         r1_ht = size(Hpack.htd.ht_factors.U1, 2);
         mem_gb_htd = s * r1_ht^2 * 16 / 1e9;
 
-        A_def=[]; B_def=[]; C_def=[];
-        A_ttd=[]; B_ttd=[]; C_ttd=[];
-        A_htd=[]; B_htd=[]; C_htd=[];
+        recon = struct();
 
         for mIdx = 1:numMethods
             tag = method_tags{mIdx};
             switch tag
                 case 't'
-                    Hin = Hpack.full;
+                    [U,S,V] = tsvd(Hten);
+                    r_req = min(k, size(U,2));
+                    Shat_full = fft(S(1:r_req,1:r_req,:), [], 3);
+                    r_eff = 1;
+                    for beta = 1:s
+                        sv = abs(diag(Shat_full(:,:,beta)));
+                        r_eff = max(r_eff, sum(sv > opts.svd_tol * max(sv)));
+                    end
+                    r_eff = min(r_eff, r_req);
+                    U1 = U(:,1:r_eff,:); S1 = S(1:r_eff,1:r_eff,:); V1 = V(:,1:r_eff,:);
+                    r_used = r_eff;
+
                 case 'ttd'
                     if mem_gb_ttd > mem_budget_gb
                         fprintf('  %-18s : SKIPPED -- estimated memory %.1f GB > budget %.1f GB (TT rank r1=%d)\n', ...
@@ -115,7 +131,11 @@ for trial = 1:ntrials
                         RelErr(c, mIdx, trial) = NaN;
                         continue;
                     end
-                    Hin = Hpack.ttd;
+                    G1 = Hpack.ttd.tt_cores.G1; G2 = Hpack.ttd.tt_cores.G2; G3 = Hpack.ttd.tt_cores.G3;
+                    [U_rep, S_rep, V_rep] = tsvd_ttd_dim3(G1, G2, G3, nRows, nCols, s, opts.svd_tol);
+                    r_used = min(k, U_rep.max_svd_rank);
+                    [U1, S1, V1] = reconstruct_truncated_ttd_dim3_730_local(U_rep, S_rep, V_rep, r_used);
+
                 case 'htd'
                     if mem_gb_htd > mem_budget_gb
                         fprintf('  %-18s : SKIPPED -- estimated memory %.1f GB > budget %.1f GB (HT rank r1=%d)\n', ...
@@ -123,33 +143,37 @@ for trial = 1:ntrials
                         RelErr(c, mIdx, trial) = NaN;
                         continue;
                     end
-                    Hin = Hpack.htd;
+                    U1h = Hpack.htd.ht_factors.U1; U2h = Hpack.htd.ht_factors.U2;
+                    U3h = Hpack.htd.ht_factors.U3; B12h = Hpack.htd.ht_factors.B12;
+                    Brooth = Hpack.htd.ht_factors.Broot;
+                    [U_rep, S_rep, V_rep] = tsvd_htd_dim3(U1h, U2h, U3h, B12h, Brooth, opts.svd_tol);
+                    r_used = min(k, U_rep.max_svd_rank);
+                    [U1, S1, V1] = reconstruct_truncated_htd_dim3_729_local(U_rep, S_rep, V_rep, r_used);
             end
-            [A_red, B_red, C_red, ~] = tera_reduce(A, B, C, k, T, L, tag, opts, Hin);
-            relerr = relative_hinf_error(A_ref, B_ref, C_ref, A_red, B_red, C_red, w_grid);
+
+            Uhat = fft(U1, [], 3); Shat = fft(S1, [], 3); Vhat = fft(V1, [], 3);
+            max_err = 0;
+            for beta = 1:s
+                Tb = Uhat(:,:,beta) * Shat(:,:,beta) * Vhat(:,:,beta)';
+                max_err = max(max_err, svds(Ahat(:,:,beta) - Tb, 1));
+            end
+            relerr = max_err / max(max_full, eps);
             RelErr(c, mIdx, trial) = relerr;
-            fprintf('  %-18s : relative H-infinity error vs reference = %.15e (order r=%d)\n', ...
-                method_names{mIdx}, relerr, size(A_red,1));
+            fprintf('  %-18s : relative H-infinity (full-tensor) error = %.15e (order r=%d)\n', ...
+                method_names{mIdx}, relerr, r_used);
 
-            switch tag
-                case 't';   A_def=A_red; B_def=B_red; C_def=C_red;
-                case 'ttd'; A_ttd=A_red; B_ttd=B_red; C_ttd=C_red;
-                case 'htd'; A_htd=A_red; B_htd=B_red; C_htd=C_red;
-            end
+            recon.(tag) = struct('Uhat', Uhat, 'Shat', Shat, 'Vhat', Vhat);
         end
 
-        % TTD-based / HTD-based vs Definition-based, same order k (skipped
-        % methods -- e.g. memory-guard NaN -- leave the comparison as NaN
-        % too, since there is no reduced model to compare).
-        if ~isempty(A_ttd)
-            relerr_ttd_def = relative_hinf_error(A_def, B_def, C_def, A_ttd, B_ttd, C_ttd, w_grid);
-            RelErr_TTDvsDef(c, trial) = relerr_ttd_def;
-            fprintf('  %-18s : relative H-infinity error vs Definition-based = %.15e\n', 'TTD-based', relerr_ttd_def);
+        if isfield(recon, 't') && isfield(recon, 'ttd')
+            [max_err, max_def] = full_pair_diff(recon.t, recon.ttd, s);
+            RelErr_TTDvsDef(c, trial) = max_err / max(max_def, eps);
+            fprintf('  %-18s : relative H-infinity error vs Definition-based = %.15e\n', 'TTD-based', RelErr_TTDvsDef(c, trial));
         end
-        if ~isempty(A_htd)
-            relerr_htd_def = relative_hinf_error(A_def, B_def, C_def, A_htd, B_htd, C_htd, w_grid);
-            RelErr_HTDvsDef(c, trial) = relerr_htd_def;
-            fprintf('  %-18s : relative H-infinity error vs Definition-based = %.15e\n', 'HTD-based', relerr_htd_def);
+        if isfield(recon, 't') && isfield(recon, 'htd')
+            [max_err, max_def] = full_pair_diff(recon.t, recon.htd, s);
+            RelErr_HTDvsDef(c, trial) = max_err / max(max_def, eps);
+            fprintf('  %-18s : relative H-infinity error vs Definition-based = %.15e\n', 'HTD-based', RelErr_HTDvsDef(c, trial));
         end
     end
 end
@@ -162,7 +186,7 @@ RelErr_TTDvsDef_std  = std(RelErr_TTDvsDef, 0, 2, 'omitnan');
 RelErr_HTDvsDef_mean = mean(RelErr_HTDvsDef, 2, 'omitnan');
 RelErr_HTDvsDef_std  = std(RelErr_HTDvsDef, 0, 2, 'omitnan');
 
-fprintf('\n\n=== T-ERA relative H-infinity error table vs high-precision reference (mean over %d trials) ===\n', ntrials);
+fprintf('\n\n=== T-ERA relative H-infinity error table, full-tensor reconstruction vs exact H (mean over %d trials) ===\n', ntrials);
 fprintf('%-10s', 'Case');
 for mIdx = 1:numMethods
     fprintf('%38s', method_names{mIdx});
@@ -176,7 +200,7 @@ for c = 1:numCases
     fprintf('\n');
 end
 
-fprintf('\n=== T-ERA relative H-infinity error vs Definition-based, SAME order k (mean over %d trials) ===\n', ntrials);
+fprintf('\n=== T-ERA relative H-infinity error vs Definition-based, SAME order k, full-tensor (mean over %d trials) ===\n', ntrials);
 fprintf('%-10s%38s%38s\n', 'Case', 'TTD_vs_Def', 'HTD_vs_Def');
 for c = 1:numCases
     fprintf('%-10s', case_names{c});
@@ -191,73 +215,81 @@ if isempty(jobid); jobid = datestr(now,'yyyymmdd_HHMMSS'); end
 
 RowNames = case_names(:);
 Tbl = array2table(RelErr_mean, 'VariableNames', strrep(method_names,'-','_'), 'RowNames', RowNames);
-writetable(Tbl, fullfile('results', sprintf('tera_hinf_relerr_804_%s.csv', jobid)), 'WriteRowNames', true);
+writetable(Tbl, fullfile('results', sprintf('tera_hinf_full_relerr_805_%s.csv', jobid)), 'WriteRowNames', true);
 
 TblDef = table(RelErr_TTDvsDef_mean, RelErr_HTDvsDef_mean, ...
     'VariableNames', {'TTD_vs_Def','HTD_vs_Def'}, 'RowNames', RowNames);
-writetable(TblDef, fullfile('results', sprintf('tera_hinf_relerr_vs_def_804_%s.csv', jobid)), 'WriteRowNames', true);
+writetable(TblDef, fullfile('results', sprintf('tera_hinf_full_relerr_vs_def_805_%s.csv', jobid)), 'WriteRowNames', true);
 
-save(fullfile('results', sprintf('tera_hinf_relerr_804_%s.mat', jobid)), ...
+save(fullfile('results', sprintf('tera_hinf_full_relerr_805_%s.mat', jobid)), ...
      'case_names','method_names','RelErr','RelErr_mean','RelErr_std', ...
      'RelErr_TTDvsDef','RelErr_HTDvsDef','RelErr_TTDvsDef_mean','RelErr_TTDvsDef_std', ...
      'RelErr_HTDvsDef_mean','RelErr_HTDvsDef_std', ...
-     'ntrials','w_grid','H','n','s','k_frac');
+     'ntrials','H','n','s','k_frac');
 
 disp(Tbl);
 disp(TblDef);
 
 %% ======================= Local Functions =======================
 
-function relerr = relative_hinf_error(A, B, C, A_red, B_red, C_red, w_grid)
-s = size(A,3);
-n1 = size(A,1); n2 = size(B,2); l1 = size(C,1);
-r1 = size(A_red,1); m2 = size(B_red,2); l2 = size(C_red,1);
-assert(n2==m2 && l1==l2, 'I/O dimension mismatch between reference and reduced systems.');
-
-Ahat = fft(A,[],3);     Bhat = fft(B,[],3);     Chat = fft(C,[],3);
-Aredhat = fft(A_red,[],3); Bredhat = fft(B_red,[],3); Credhat = fft(C_red,[],3);
-
-In1 = eye(n1); Ir1 = eye(r1);
-max_err = 0; max_full = 0;
-radius = 1.01;
-
+function [max_err, max_def] = full_pair_diff(recA, recB, s)
+max_err = 0; max_def = 0;
 for beta = 1:s
-    Ab = Ahat(:,:,beta); Bb = Bhat(:,:,beta); Cb = Chat(:,:,beta);
-    Arb = Aredhat(:,:,beta); Brb = Bredhat(:,:,beta); Crb = Credhat(:,:,beta);
-
-    for zi = 1:numel(w_grid)
-        z = radius*exp(1i*w_grid(zi));
-        Gfull = Cb  * ((z*In1 - Ab)  \ Bb);
-        Gred  = Crb * ((z*Ir1 - Arb) \ Brb);
-        sv_err  = svd(Gfull - Gred);
-        sv_full = svd(Gfull);
-        max_err  = max(max_err,  sv_err(1));
-        max_full = max(max_full, sv_full(1));
-    end
+    Ta = recA.Uhat(:,:,beta) * recA.Shat(:,:,beta) * recA.Vhat(:,:,beta)';
+    Tb = recB.Uhat(:,:,beta) * recB.Shat(:,:,beta) * recB.Vhat(:,:,beta)';
+    max_err = max(max_err, svds(Ta - Tb, 1));
+    max_def = max(max_def, svds(Ta, 1));
+end
 end
 
-relerr = max_err / max(max_full, eps);
+function [U1, S1, V1] = reconstruct_truncated_ttd_dim3_730_local(U_rep, S_rep, V_rep, r)
+P1 = U_rep.cores{1};   % [1, n1, r1]
+P2 = U_rep.cores{2};   % [r1, s, n3]
+Q2 = S_rep.cores{2};   % [s, s, n3]
+R1 = V_rep.cores{1};   % [1, n2, q]
+R2 = V_rep.cores{2};   % [q, s, n3]
+
+n1 = size(P1,2);
+n2 = size(R1,2);
+n3 = size(P2,3);
+
+P2t = P2(:, 1:r, :);
+Q2t = Q2(1:r, 1:r, :);
+R2t = R2(:, 1:r, :);
+
+Qmat = reshape(P1, n1, size(P1,3));
+Q2mat = reshape(R1, n2, size(R1,3));
+
+Uphys = ifft(P2t, [], 3);
+Sphys = ifft(Q2t, [], 3);
+Vphys = ifft(R2t, [], 3);
+
+r1 = size(Qmat,2);
+q = size(Q2mat,2);
+U1 = real(reshape(Qmat * reshape(Uphys, r1, r*n3), n1, r, n3));
+S1 = real(Sphys);
+V1 = real(reshape(Q2mat * reshape(Vphys, q, r*n3), n2, r, n3));
 end
 
-function [A,B,C] = gen_ABC_base(n, m, l, s)
-density = 1e-3;
-A = sprandn(n*n*s, 1, density);
-A = reshape(full(A), [n,n,s]) / 200;
-B = randn(n,m,s);
-C = randn(l,n,s);
-end
+function [U1, S1, V1] = reconstruct_truncated_htd_dim3_729_local(U_rep, S_rep, V_rep, r)
+U1leaf = U_rep.leaf;
+V1leaf = V_rep.leaf;
 
-function A = stabilize_tensor_A(A, target_rho)
-Ahat = fft(A, [], 3);
-s = size(A,3);
-for j = 1:s
-    Aj = Ahat(:,:,j);
-    rho = max(abs(eig(Aj)));
-    if rho > 0
-        Ahat(:,:,j) = (target_rho / max(target_rho, rho)) * Aj;
-    end
-end
-A = real(ifft(Ahat, [], 3));
+Pcore = U_rep.core(:, 1:r, :);
+Qcore = S_rep.core(1:r, 1:r, :);
+Rcore = V_rep.core(:, 1:r, :);
+
+n1 = size(U1leaf,1); r1_ht = size(U1leaf,2);
+n2 = size(V1leaf,1); r2_ht = size(V1leaf,2);
+n3 = size(Pcore,3);
+
+Uphys = ifft(Pcore, [], 3);
+Sphys = ifft(Qcore, [], 3);
+Vphys = ifft(Rcore, [], 3);
+
+U1 = real(reshape(U1leaf * reshape(Uphys, r1_ht, r*n3), n1, r, n3));
+S1 = real(Sphys);
+V1 = real(reshape(V1leaf * reshape(Vphys, r2_ht, r*n3), n2, r, n3));
 end
 
 function [l, L] = pick_lL(H)
@@ -280,7 +312,7 @@ U1_gen = []; U2_gen = []; U3_gen = [];
 B12_gen = []; Broot_gen = [];
 
 switch case_id
-    case 1   % Sparse random -- _804: FIXED nnz (~30), independent of N
+    case 1   % Sparse random -- FIXED nnz (~30), independent of N
         target_nnz = 30;
         N = nRows*nCols*s;
         density = min(1, target_nnz/N);
