@@ -19,7 +19,7 @@ algorithms/    Core TTD-/HTD-/definition-based routines called by the drivers
 | `tsvd_dim4_timing.m` | 4th-order T-SVD: definition-based vs. TTD-based vs. HTD-based, timing comparison across problem size, for Sparse / Low-TT-rank / Low-HT-rank test tensors. |
 | `tprod_timing.m` | 3rd-order T-product: definition-based vs. TTD-based vs. HTD-based, timing comparison. |
 | `tera_timing.m` | T-ERA (Eigensystem Realization Algorithm on transform-domain Hankel tensors): timing comparison of the three T-SVD backends inside the reduced-order model construction. |
-| `tera_relerr_hinf.m` | T-ERA accuracy comparison: relative H-infinity error between TTD-/HTD-/definition-based reduced models and a common higher-order reference, evaluated via per-frequency resolvent response. |
+| `tera_relerr_hinf.m` | T-ERA T-SVD-backend accuracy comparison: relative H-infinity error between each backend's (definition/TTD/HTD) T-SVD reconstruction and the exact input Hankel tensor, evaluated as a per-frequency spectral-norm (sup-over-frequency operator-norm) distance. |
 
 ### algorithms/
 
@@ -42,16 +42,18 @@ These scripts require the following third-party toolboxes on the MATLAB path
 - A T-product toolbox providing `tsvd`, `tprod`, `tran`, `bcirc` (definition-based
   baseline operators used for validation/comparison).
 
-## Known issues
+## Note on `tera_relerr_hinf.m`'s methodology
 
-- `tera_relerr_hinf.m`, **Sparse case**: the current sparse-tensor generator
-  (`target_nnz = 30`, independent of tensor size) scatters nonzeros uniformly
-  over the *entire* Hankel tensor. At the problem size used here (H=10000,
-  Hankel block size l=m=100), the probability that any of the 30 nonzeros
-  lands inside the `(1:l, 1:m, :)` corner block used to build the reduced
-  model's B/C matrices is ~0.3% per trial — so that corner is effectively
-  always zero/noise, and the reported relative H-infinity error for the
-  Sparse case is not currently meaningful (tends to saturate near 1.0). This
-  does not affect the Low-TT-rank / Low-HT-rank cases. A fix (targeted
-  nonzero placement inside the corner block) is planned but not yet applied
-  in this version.
+An earlier version of this comparison built each backend's ERA reduced
+model `(A,B,C)` via `tera_reduce.m` and compared them through a
+resolvent/H-infinity evaluation, with `B_red`/`C_red` extracted from the
+Hankel tensor's `(1:l, 1:m, :)` corner block. That corner is a meaningful
+"first Markov parameter" only for a Hankel tensor derived from a real
+`(A,B,C)` system; the Sparse/Low-TT-rank/Low-HT-rank test tensors used
+here are instead synthetic tensors fed directly as a Hankel-matrix
+surrogate, and for the Sparse case specifically (30 nonzeros scattered
+over ~9e8 entries at H=10000) that corner block is essentially always
+empty, making the old comparison uninformative for that case. The current
+version instead compares each backend's T-SVD reconstruction directly
+against the exact input tensor (see the file's header), which uses the
+full tensor and needs no state-space realization step at all.
