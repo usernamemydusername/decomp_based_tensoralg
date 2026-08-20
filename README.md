@@ -41,19 +41,3 @@ These scripts require the following third-party toolboxes on the MATLAB path
 - **htucker** (`htenrandn`, `orthog`, etc.)
 - A T-product toolbox providing `tsvd`, `tprod`, `tran`, `bcirc` (definition-based
   baseline operators used for validation/comparison).
-
-## Note on `tera_relerr_hinf.m`'s methodology
-
-An earlier version of this comparison built each backend's ERA reduced
-model `(A,B,C)` via `tera_reduce.m` and compared them through a
-resolvent/H-infinity evaluation, with `B_red`/`C_red` extracted from the
-Hankel tensor's `(1:l, 1:m, :)` corner block. That corner is a meaningful
-"first Markov parameter" only for a Hankel tensor derived from a real
-`(A,B,C)` system; the Sparse/Low-TT-rank/Low-HT-rank test tensors used
-here are instead synthetic tensors fed directly as a Hankel-matrix
-surrogate, and for the Sparse case specifically (30 nonzeros scattered
-over ~9e8 entries at H=10000) that corner block is essentially always
-empty, making the old comparison uninformative for that case. The current
-version instead compares each backend's T-SVD reconstruction directly
-against the exact input tensor (see the file's header), which uses the
-full tensor and needs no state-space realization step at all.
