@@ -8,9 +8,8 @@
 %      independent tsvd_ttd_dim4_ref.m implementation, and that both the
 %      TTD- and HTD-based reconstructions agree with a directly-generated
 %      tensor to <=1e-6 relative error, before running any timed sweep.
-%   2. For each of three cases -- (1) Random Sparse (fixed nnz=30,
-%      independent of tensor size), (2) Low TT-rank, (3) Low HT-rank --
-%      and each size n1=n2 in 2.^(2:13) (n3=n4=4 fixed), times:
+%   2. Compute computational time for each of three cases (1) Random Sparse (fixed nnz=30,
+%      independent of tensor size), (2) Low TT-rank, (3) Low HT-rank of size n1=n2 in 2.^(2:13) (n3=n4=4 fixed):
 %        - definition_tsvd_dim4 (local function): full per-frequency
 %          dense SVD after a 2-D FFT along modes 3,4
 %        - tsvd_ttd_dim4.m (TTD-based, computed from TT cores)
@@ -20,12 +19,11 @@
 %      the exact input tensor.
 %   3. Saves timing/accuracy tables and a 3-panel log-log timing figure.
 %
-% Needs on the path: tsvd_ttd_dim4.m, tsvd_ttd_dim4_ref.m (validation
+% Required files: tsvd_ttd_dim4.m, tsvd_ttd_dim4_ref.m (validation
 % only), tsvd_htd_dim4.m, plus the TT-Toolbox (tt_tensor/tt_rand/round)
 % and htucker (htenrandn/orthog) toolboxes for tensor generation.
 %
-% Outputs (to results/, filenames suffixed by SLURM_JOB_ID or a
-% timestamp): tsvd_dim4_803_<id>.mat (timing/accuracy arrays) and
+% Outputs (to results/): tsvd_dim4_803_<id>.mat (timing/accuracy arrays) and
 % tsvd_dim4_panel_803_<id>.fig (3-panel figure, one panel per case).
 %
 % Notes:
