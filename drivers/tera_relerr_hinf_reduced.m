@@ -1,94 +1,32 @@
 %% ---------------------------------------------------------------
-%  TERA_RELERR_HINF_REDUCED  T-ERA reduced-SYSTEM accuracy comparison:
-%  Definition-based vs TTD-based vs HTD-based, measured as a genuine
-%  H-infinity distance between each method's actual reduced-order model
-%  (A_red,B_red,C_red) -- not a T-SVD reconstruction-accuracy check (see
-%  tera_relerr_hinf.m for that separate, differently-scoped metric).
+%  TERA_RELERR_HINF_REDUCED
+%  Builds the T-ERA reduced-order model (A_red,B_red,C_red) with each of
+%  the Definition-based, TTD-based, and HTD-based T-SVD backends, then
+%  compares the resulting transfer functions using the exact
+%  H-infinity norm (relative to the Definition-based model), across the
+%  Sparse / Low-TT-rank / Low-HT-rank test cases.
 %
-%  What it does: for n=100, s=9, H=10000 (nRows=nCols=10000), and each of
-%  the same three cases as tera_relerr_hinf.m/tera_timing.m -- (1) Random
-%  Sparse Hankel tensor (fixed nnz=30, independent of H), (2) Low
-%  TT-rank, (3) Low HT-rank -- builds each method's actual ERA reduced
-%  system via tera_reduce.m, then compares the resulting transfer
-%  functions G(z)=C_red(zI-A_red)^{-1}B_red across methods using the
-%  EXACT H-infinity norm (via bcirc() block-circulant unfolding + the
-%  Control System Toolbox's hinfnorm(), the same technique used in
-%  Shenghan Mei's DDMOR-TPDS reference code for this paper's T-ERA/ERA
-%  comparison), not a finite frequency-grid approximation.
+%  Required files:
+%    - tera_reduce.m           (reduced-system construction; internally
+%                                uses tsvd_ttd_dim3.m / tsvd_htd_dim3.m
+%                                for the 'ttd'/'htd' backends)
+%    - bcirc.m                 (block-circulant unfolding, used to get
+%                                the exact H-infinity norm via hinfnorm()
+%                                instead of a frequency-grid sweep)
+%    - Control System Toolbox  (ss, hinfnorm)
+%    - TT-Toolbox              (tt_tensor, round, tt_rand)
 %
-%  Why this needed its own Hh construction: tera_reduce.m's A_red formula
-%  is A_red = S^{-1/2} U1' Hh V1 S^{-1/2}, where Hh is meant to be a
-%  one-step-shifted Hankel surrogate of H. The naive choice Hh=H collapses
-%  ALGEBRAICALLY to A_red=I whenever H=U*S*V' (its own SVD) -- because
-%  S^{-1/2}(U'U)S(V'V)S^{-1/2}=I identically, for every method and every
-%  case, regardless of what H actually contains. A_red=I sits exactly on
-%  the unit circle (marginally unstable), making the true H-infinity norm
-%  of the resulting system either Inf or, if evaluated away from the
-%  singularity, a number that secretly reduces to comparing C_red*B_red
-%  only (since (zI-I)^{-1}=I/(z-1) factors out identically across every
-%  method) -- i.e. a disguised T-SVD reconstruction-accuracy check again.
-%  Fix used here: build Hh from a PRESCRIBED stable dynamics matrix D
-%  (real, diagonal, entries linspace(0.2,0.8,r_cap), the SAME for every
-%  Fourier slice beta -- beta-independence trivially satisfies the
-%  conjugate symmetry needed for a real ifft result). For each slice,
-%  take the FULL (untruncated) SVD Hhat_beta=U*S*V', then set
-%      Hh_hat_beta = U * S^{1/2} * D * S^{1/2} * V'   (D padded with
-%                                                       zeros beyond r_cap)
-%  and Hh = real(ifft(Hh_hat,[],3)). This is built ONCE from the exact
-%  SVD of H, independently of any T-SVD backend, then handed identically
-%  to all three methods. By direct substitution: when U_r,S_r,V_r are the
-%  EXACT top-r truncation of that same full SVD (true for Definition-
-%  based/'t'), A_red collapses to EXACTLY diag(d_1,...,d_r) -- the
-%  prescribed dynamics, to machine precision (checked at runtime: see
-%  the "diag-check" column in the output table). For TTD/HTD, U_r/V_r are
-%  only approximate top-r subspaces from the compressed T-SVD backend, so
-%  A_red deviates from diag(D) by an amount that genuinely reflects that
-%  backend's subspace-approximation error -- a non-trivial, meaningful
-%  comparison, unlike the Hh=H case where every method degenerated to the
-%  same trivial A_red=I regardless of backend accuracy.
+%  Input (hardcoded problem parameters, no external args):
+%    - n=100, s=9, H=10000 (nRows=nCols=10000)
+%    - case_names = {'Sparse','LowTT','LowHT'}
+%    - ntrials=3
 %
-%  Rank-cap: all three structured H cases are deliberately low true rank
-%  by design, but a fixed truncation order (as tera_relerr_hinf.m and
-%  tera_timing.m use for the Definition-based method) can exceed that
-%  true rank. Under Hh=H that was harmless (the S^{-1/2} S S^{-1/2}=I
-%  cancellation is exact through near-zero singular values too), but
-%  under the prescribed-D construction there is no such protection:
-%  truncating past the true rank means dividing by near-zero singular
-%  values. Fix: all three methods here are truncated to r_cap = min over
-%  Fourier slices of H's own achieved numerical rank (tol=1e-10 relative
-%  to each slice's top singular value), not a fixed k_frac-derived order.
-%
-%  Requires:
-%   - tera_reduce.m           (reduced-system construction; internally
-%                               uses tsvd_ttd_dim3.m / tsvd_htd_dim3.m
-%                               for the 'ttd'/'htd' backends)
-%   - bcirc.m                 (block-circulant unfolding of a 3-way
-%                               tensor into an (n1*n3)x(n2*n3) matrix --
-%                               gives the EXACT worst-case-over-Fourier-
-%                               slices H-infinity norm via one hinfnorm()
-%                               call instead of a manual frequency sweep)
-%   - Control System Toolbox  (ss, hinfnorm)
-%   - TT-Toolbox              (tt_tensor, round, tt_rand -- for the
-%                               structured-H case generation, unchanged
-%                               from tera_relerr_hinf.m/tera_timing.m)
-%
-%  Outputs (to results/, filenames suffixed by SLURM_JOB_ID or a
-%  timestamp): tera_relerr_hinf_reduced_<id>.csv/.mat -- one row per case
-%  with r_cap (achieved rank used), TTD-vs-Definition and HTD-vs-
-%  Definition relative H-infinity error (mean/std over ntrials=3 trials),
-%  and the Definition-based diag-check described above.
-%
-%  Notes:
-%    - This file only changes how the H-infinity accuracy of the REDUCED
-%      SYSTEM is measured. It does not affect, and is not needed by,
-%      tera_timing.m or the Sparse/LowTT/LowHT case generation itself,
-%      which are identical here to tera_relerr_hinf.m/tera_timing.m.
-%    - Compares TTD-based and HTD-based against Definition-based only
-%      (not a separate high-order "true" reference model): since
-%      Definition-based uses the exact SVD of H, it already reduces to
-%      the prescribed-dynamics ground truth (diag(D)) by construction, so
-%      it serves directly as the baseline that TTD/HTD approximation
-%      quality is measured against.
+%  Output (written to results/, filenames suffixed by SLURM_JOB_ID or a
+%  timestamp):
+%    - tera_relerr_hinf_reduced_<id>.csv/.mat -- one row per case with
+%      r_cap (achieved reduced order), TTD-vs-Definition and HTD-vs-
+%      Definition relative H-infinity error (mean/std over trials), and
+%      the Definition-based diag-check sanity value.
 %  ---------------------------------------------------------------
 
 clear; clc;
