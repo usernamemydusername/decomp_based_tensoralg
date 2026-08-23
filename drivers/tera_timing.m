@@ -1,35 +1,28 @@
 %% ---------------------------------------------------------------
-%  TERA_TIMING  T-ERA (Eigensystem Realization Algorithm on a transform-
-%  domain Hankel tensor) reduced-order-model construction timing
-%  comparison: definition-based full T-SVD vs TTD-based vs HTD-based
-%  backend, across three Hankel-tensor generation regimes.
+%  TERA_TIMING
+%  Times T-ERA (Eigensystem Realization Algorithm on a transform-domain
+%  Hankel tensor) reduced-order-model construction under each of the
+%  Definition-based, TTD-based, and HTD-based T-SVD backends, across the
+%  Sparse / Low-TT-rank / Low-HT-rank test cases. Does not evaluate
+%  reduced-model accuracy -- see tera_relerr_hinf_reduced.m for that.
 %
-%  What it does: for n=100 (state dimension), s=9 (tubal length), and a
-%  fixed Hankel block size H=10000 (giving nRows=nCols=10000), and each of
-%  three cases -- (1) Random Sparse Hankel tensor (fixed nnz=30,
-%  independent of H), (2) Low TT-rank, (3) Low HT-rank -- generates a
-%  stable random system (A,B,C) plus the corresponding Hankel tensor
-%  representation, then times tera_reduce.m's full reduced-order-model
-%  construction (Hankel T-SVD + ERA assembly) under each of the three
-%  T-SVD backends ('t'/'ttd'/'htd'), repeated over ntrials=10 trials.
-%  Saves a timing table and a 3-panel bar chart (one panel per case, one
-%  bar per method).
+%  Required files:
+%    - tera_reduce.m           (reduced-system construction; internally
+%                                uses tsvd_ttd_dim3.m / tsvd_htd_dim3.m
+%                                for the 'ttd'/'htd' backends, and the
+%                                tproduct toolbox's tsvd/tprod/tran)
+%    - TT-Toolbox / htucker    (Hankel-tensor generation)
 %
-%  Needs on the path: tera_reduce.m, which in turn needs tsvd_ttd_dim3.m,
-%  tsvd_htd_dim3.m, and the tproduct toolbox (tsvd/tprod/tran); plus the
-%  TT-Toolbox and htucker toolboxes for Hankel-tensor generation.
+%  Input (hardcoded problem parameters, no external args):
+%    - n=100 (state dimension), s=9 (tubal length), H=10000
+%      (nRows=nCols=10000), k_frac=0.8
+%    - case_names = {'Sparse','LowTT','LowHT'}
+%    - ntrials=10
 %
-%  Outputs (to results/): TERA_scaling_H10000-10000_kfrac0.80_trials10_803.mat
-%  and the matching .fig bar chart.
-%
-%  Notes:
-%    - This driver only TIMES the reduced-model construction; it does not
-%      evaluate reduced-model accuracy. For an accuracy comparison, see
-%      tera_relerr_hinf.m.
-%    - The memory guard (mem_budget_gb) that skips TTD/HTD as NaN when
-%      their achieved rank makes the intermediate arrays too large only
-%      meaningfully binds in the Sparse case; Low TT-/HT-rank ranks stay
-%      small regardless of H.
+%  Output (to results/):
+%    - TERA_scaling_H10000-10000_kfrac0.80_trials10_803.mat (timing table)
+%    - matching .fig 3-panel bar chart (one panel per case, one bar per
+%      method)
 %  ---------------------------------------------------------------
 
 clear; clc;

@@ -1,41 +1,27 @@
-%% TSVD_DIM4_TIMING  4th-order T-SVD timing/accuracy comparison:
-% definition-based vs TTD-based vs HTD-based, across three tensor-
-% generation regimes and a range of problem sizes.
+%% ---------------------------------------------------------------
+%  TSVD_DIM4_TIMING
+%  Times and checks the accuracy of 4th-order T-SVD under each of the
+%  Definition-based, TTD-based, and HTD-based backends, across the
+%  Sparse / Low-TT-rank / Low-HT-rank test cases and a range of problem
+%  sizes. Also runs a one-time, small-scale (n1=n2=16) self-consistency
+%  check before the timed sweep.
 %
-% What it does:
-%   1. Runs a one-time, small-scale (n1=n2=16) self-consistency check:
-%      confirms tsvd_ttd_dim4.m's reconstruction agrees with the
-%      independent tsvd_ttd_dim4_ref.m implementation, and that both the
-%      TTD- and HTD-based reconstructions agree with a directly-generated
-%      tensor to <=1e-6 relative error, before running any timed sweep.
-%   2. Compute computational time for each of three cases (1) Random Sparse (fixed nnz=30,
-%      independent of tensor size), (2) Low TT-rank, (3) Low HT-rank of size n1=n2 in 2.^(2:13) (n3=n4=4 fixed):
-%        - definition_tsvd_dim4 (local function): full per-frequency
-%          dense SVD after a 2-D FFT along modes 3,4
-%        - tsvd_ttd_dim4.m (TTD-based, computed from TT cores)
-%        - tsvd_htd_dim4.m (HTD-based, computed from HT factors)
-%      and (for the Sparse case, and wherever else feasible) records the
-%      reconstruction relative error of the TTD-/HTD-based T-SVD against
-%      the exact input tensor.
-%   3. Saves timing/accuracy tables and a 3-panel log-log timing figure.
+%  Required files:
+%    - tsvd_ttd_dim4.m          (TTD-based, computed from TT cores)
+%    - tsvd_ttd_dim4_ref.m      (validation-only reference implementation)
+%    - tsvd_htd_dim4.m          (HTD-based, computed from HT factors)
+%    - TT-Toolbox / htucker    (tensor generation)
 %
-% Required files: tsvd_ttd_dim4.m, tsvd_ttd_dim4_ref.m (validation
-% only), tsvd_htd_dim4.m, plus the TT-Toolbox (tt_tensor/tt_rand/round)
-% and htucker (htenrandn/orthog) toolboxes for tensor generation.
+%  Input (hardcoded problem parameters, no external args):
+%    - powers=2:13 (n1=n2=2.^powers), n3=n4=4
+%    - case_names: Sparse (target_nnz_sparse=30), LowTT, LowHT
+%    - num_trials=5
 %
-% Outputs (to results/): tsvd_dim4_803_<id>.mat (timing/accuracy arrays) and
-% tsvd_dim4_panel_803_<id>.fig (3-panel figure, one panel per case).
-%
-% Notes:
-%   - Definition-based and TTD-based (Sparse case only) are skipped
-%     (recorded as NaN) above fixed size cutoffs / a dynamic memory-
-%     budget estimate, to avoid OOM crashing the whole sweep; see
-%     n_full_max_def / n_full_max_ttd_sparse / mem_budget_gb.
-%   - n3=n4=4 are fixed across the whole sweep (only n1=n2 grows), so
-%     definition-based cost here grows like the SVD of an n1 x n2 matrix,
-%     NOT like n1^4 -- that quartic-in-n regime only appears if n3,n4 are
-%     also scaled up to n (see the paper's complexity remarks, which
-%     assume n1=n2=n3=n).
+%  Output (to results/):
+%    - tsvd_dim4_803_<id>.mat (timing/accuracy arrays)
+%    - tsvd_dim4_panel_803_<id>.fig (3-panel log-log timing figure, one
+%      panel per case)
+%  ---------------------------------------------------------------
 
 clc; clear; close all;
 

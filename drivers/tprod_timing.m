@@ -1,34 +1,26 @@
-%% TPROD_TIMING  3rd-order T-product timing/accuracy comparison:
-% definition-based vs TTD-based vs HTD-based, across three tensor-
-% generation regimes and a range of problem sizes.
+%% ---------------------------------------------------------------
+%  TPROD_TIMING
+%  Times and checks the accuracy of 3rd-order T-product under each of the
+%  Definition-based, TTD-based, and HTD-based backends, across the
+%  Sparse / Low-TT-rank / Low-HT-rank test cases and a range of problem
+%  sizes.
 %
-% What it does: for each of three cases -- (1) Random Sparse (fixed
-% nnz=30, independent of tensor size), (2) Low TT-rank, (3) Low HT-rank
-% -- and each size n=n1=n2=l in 2.^(2:13) (transform-mode dimension
-% n3=6 fixed), generates a random A,B pair in that regime and times:
-%   - tprod_definition.m (definition-based, block-circulant)
-%   - tprod_ttd.m (TTD-based, computed from TT cores)
-%   - tprod_htd.m (HTD-based, computed from HT factors)
-% and (Sparse case) records the relative error of the TTD-/HTD-based
-% product against the definition-based result. Saves timing/accuracy
-% tables and a 3-panel log-log timing figure.
+%  Required files:
+%    - tprod_definition.m      (definition-based, block-circulant)
+%    - tprod_ttd.m              (TTD-based, computed from TT cores)
+%    - tprod_htd.m              (HTD-based, computed from HT factors)
+%    - TT-Toolbox / htucker    (tensor generation)
 %
-% Needs on the path: tprod_definition.m, tprod_ttd.m, tprod_htd.m, plus
-% the TT-Toolbox (tt_tensor/tt_rand/round) and htucker toolboxes for
-% tensor generation.
+%  Input (hardcoded problem parameters, no external args):
+%    - n3=6 (transform-mode dimension), powers=2:13 (n1=n2=l=2.^powers)
+%    - case_names: Sparse (target_nnz_sparse=30), LowTT, LowHT
+%    - num_trials=5
 %
-% Outputs (to results/, filenames suffixed by SLURM_JOB_ID or a
-% timestamp): tprod_dim3_data_803_<id>.mat, tprod_dim3_panel_803_<id>.fig.
-%
-% Notes:
-%   - Definition-based T-product is skipped (NaN) above a fixed size
-%     cutoff (n_full_max_def) or on OOM/error (caught per case); TTD-
-%     based T-product in the Sparse case is additionally skipped under a
-%     dynamic memory-budget estimate (mem_budget_gb) once its achieved
-%     rank makes the core tensor too large.
-%   - Low TT-rank / Low HT-rank cases are constructed to have a small,
-%     size-independent true rank, so none of the above guards ever bind
-%     there.
+%  Output (to results/, filenames suffixed by SLURM_JOB_ID or a
+%  timestamp):
+%    - tprod_dim3_data_803_<id>.mat (timing/accuracy tables)
+%    - tprod_dim3_panel_803_<id>.fig (3-panel log-log timing figure)
+%  ---------------------------------------------------------------
 
 clc; clear; close all;
 

@@ -19,7 +19,7 @@ algorithms/    Core TTD-/HTD-/definition-based routines called by the drivers
 | `tsvd_dim4_timing.m` | 4th-order T-SVD: definition-based vs. TTD-based vs. HTD-based, timing comparison across problem size, for Sparse / Low-TT-rank / Low-HT-rank test tensors. |
 | `tprod_timing.m` | 3rd-order T-product: definition-based vs. TTD-based vs. HTD-based, timing comparison. |
 | `tera_timing.m` | T-ERA (Eigensystem Realization Algorithm on transform-domain Hankel tensors): timing comparison of the three T-SVD backends inside the reduced-order model construction. |
-| `tera_relerr_hinf.m` | T-ERA T-SVD-backend accuracy comparison: relative H-infinity error between each backend's (definition/TTD/HTD) T-SVD reconstruction and the exact input Hankel tensor, evaluated as a per-frequency spectral-norm (sup-over-frequency operator-norm) distance. |
+| `tera_relerr_hinf_reduced.m` | T-ERA reduced-system accuracy comparison: relative H-infinity error between the TTD-/HTD-based and Definition-based reduced-order models (A_red,B_red,C_red), computed exactly via block-circulant unfolding and `hinfnorm`. |
 
 ### algorithms/
 
@@ -37,7 +37,9 @@ algorithms/    Core TTD-/HTD-/definition-based routines called by the drivers
 
 These scripts require the following third-party toolboxes on the MATLAB path
 (not included in this repo):
-- **TT-Toolbox** (`tt_tensor`, `tt_rand`, etc.)
-- **htucker** (`htenrandn`, `orthog`, etc.)
-- A T-product toolbox providing `tsvd`, `tprod`, `tran`, `bcirc` (definition-based
-  baseline operators used for validation/comparison).
+- **TT-Toolbox** (`tt_tensor`, `tt_rand`, etc.) — [GitHub](https://github.com/oseledets/TT-Toolbox)
+- **htucker** (`htenrandn`, `orthog`, etc.) — [software page](https://anchp.epfl.ch/index-html/software/htucker/),
+  Kressner & Tobler, "Algorithm 941: htucker — A Matlab toolbox for tensors in
+  hierarchical Tucker format," *ACM TOMS* 40(3), 2014, [DOI](https://doi.org/10.1145/2538688)
+- **Tensor-tensor product toolbox** (`tsvd`, `tprod`, `tran`, `bcirc` — definition-based
+  baseline operators used for validation/comparison) — [GitHub](https://github.com/canyilu/Tensor-tensor-product-toolbox)

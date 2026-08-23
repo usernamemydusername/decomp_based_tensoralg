@@ -58,9 +58,9 @@ function [A_red, B_red, C_red, prof] = tera_reduce(A, B, C, k, T, L, method, opt
 %     compare two systems that are valid realizations in different bases
 %     (T-SVD is only unique up to sign per singular vector). Compare via
 %     a basis-independent metric instead (e.g. resolvent/H-infinity
-%     response), or compare the underlying T-SVD's reconstruction
-%     accuracy directly (bypassing this function entirely, as
-%     tera_relerr_hinf.m does).
+%     response -- see tera_relerr_hinf_reduced.m), or compare the
+%     underlying T-SVD's reconstruction accuracy directly, bypassing
+%     this function entirely.
 
 if nargin < 7 || isempty(method), method = 't'; end
 if nargin < 8 || isempty(opts), opts = struct(); end
