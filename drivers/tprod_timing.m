@@ -11,7 +11,7 @@
 %    - tprod_htd.m              (HTD-based, computed from HT factors)
 %    - TT-Toolbox / htucker    (tensor generation)
 %
-%  Input (hardcoded problem parameters, no external args):
+%  Input parameters:
 %    - n3=6 (transform-mode dimension), powers=2:13 (n1=n2=l=2.^powers)
 %    - case_names: Sparse (target_nnz_sparse=30), LowTT, LowHT
 %    - num_trials=5
