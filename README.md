@@ -41,7 +41,7 @@ algorithms/    Core TTD-/HTD-/definition-based routines called by the drivers
 These scripts require the following third-party toolboxes on the MATLAB path
 (not included in this repo):
 - **TT-Toolbox** (`tt_tensor`, `tt_rand`, etc.) — [https://github.com/oseledets/TT-Toolbox](https://github.com/oseledets/TT-Toolbox)
-- **htucker** (`htenrandn`, `orthog`, etc.) — [(https://anchp.epfl.ch/index-html/software/htucker/)](https://anchp.epfl.ch/index-html/software/htucker/),
+- **htucker** (`htenrandn`, `orthog`, etc.) —
   Kressner & Tobler, "Algorithm 941: htucker — A Matlab toolbox for tensors in
   hierarchical Tucker format," *ACM TOMS* 40(3), 2014, [https://doi.org/10.1145/2538688](https://doi.org/10.1145/2538688)
 - **Tensor-tensor product toolbox** (`tsvd`, `tprod`, `tran`, `bcirc` — definition-based
