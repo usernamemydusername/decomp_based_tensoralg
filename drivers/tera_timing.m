@@ -13,7 +13,7 @@
 %                                tproduct toolbox's tsvd/tprod/tran)
 %    - TT-Toolbox / htucker    (Hankel-tensor generation)
 %
-%  Input (hardcoded problem parameters, no external args):
+%  Input parameters:
 %    - n=100 (state dimension), s=9 (tubal length), H=10000
 %      (nRows=nCols=10000), k_frac=0.8
 %    - case_names = {'Sparse','LowTT','LowHT'}
