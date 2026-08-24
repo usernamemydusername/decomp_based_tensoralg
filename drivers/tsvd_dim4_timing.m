@@ -12,7 +12,7 @@
 %    - tsvd_htd_dim4.m          (HTD-based, computed from HT factors)
 %    - TT-Toolbox / htucker    (tensor generation)
 %
-%  Input (hardcoded problem parameters, no external args):
+%  Input parameters:
 %    - powers=2:13 (n1=n2=2.^powers), n3=n4=4
 %    - case_names: Sparse (target_nnz_sparse=30), LowTT, LowHT
 %    - num_trials=5
