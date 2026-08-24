@@ -21,7 +21,7 @@ function C = tprod_definition(A, B)
 %   - tproduct toolbox: bcirc
 %
 % Notes:
-%   - Not a good fit for large n1*n3 (the dense block-circulant matrix
+%   - Definition-based method fails for large n1*n3 (the block-circulant matrix
 %     grows quadratically); TTD-/HTD-based T-product avoid ever forming
 %     it when A, B are (approximately) low-rank.
 
