@@ -45,4 +45,4 @@ These scripts require the following third-party toolboxes on the MATLAB path
   Kressner & Tobler, "Algorithm 941: htucker — A Matlab toolbox for tensors in
   hierarchical Tucker format," *ACM TOMS* 40(3), 2014, [https://doi.org/10.1145/2538688](https://doi.org/10.1145/2538688)
 - **Tensor-tensor product toolbox** (`tsvd`, `tprod`, `tran`, `bcirc` — definition-based
-  baseline operators used for validation/comparison) — [[GitHub](https://github.com/canyilu/Tensor-tensor-product-toolbox)](https://github.com/canyilu/Tensor-tensor-product-toolbox)
+  baseline operators used for validation/comparison) — [(https://github.com/canyilu/Tensor-tensor-product-toolbox)](https://github.com/canyilu/Tensor-tensor-product-toolbox)
