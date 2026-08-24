@@ -16,7 +16,7 @@
 %    - Control System Toolbox  (ss, hinfnorm)
 %    - TT-Toolbox              (tt_tensor, round, tt_rand)
 %
-%  Input (hardcoded problem parameters, no external args):
+%  Input parameters:
 %    - n=100, s=9, H=10000 (nRows=nCols=10000)
 %    - case_names = {'Sparse','LowTT','LowHT'}
 %    - ntrials=3
