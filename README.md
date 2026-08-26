@@ -6,6 +6,7 @@ contains the proposed TTD- and HTD-based algorithms and scripts for reproducing
 the numerical experiments reported in the paper.
 
 **Authors:** Yidan Mei, Shenghan Mei, Ziqin He, and Can Chen
+**arXiv:** [https://arxiv.org/abs/2608.23366v1](https://arxiv.org/abs/2608.23366v1)
 
 ## Layout
 
