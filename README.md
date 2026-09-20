@@ -1,6 +1,6 @@
 # Transform-Based Multilinear Algebra via Tensor Decompositions
 
-MATLAB implementations and numerical experiment drivers accompanying the paper
+MATLAB implementations and numerical experiment drivers for the paper
 *Transform-Based Multilinear Algebra via Tensor Decompositions*. This repository
 contains the proposed TTD- and HTD-based algorithms and scripts for reproducing
 the numerical experiments reported in the paper.
